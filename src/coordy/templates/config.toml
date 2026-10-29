@@ -1,0 +1,39 @@
+# Coord configuration. Edit, save, and restart Claude Desktop (or `coordy watch`).
+
+[whisper]
+# "large-v3" is the most accurate for Arabic. "large-v3-turbo" is ~3x faster
+# but noticeably weaker on Arabic dialects.
+model = "large-v3"
+device = "auto"            # auto | cuda | cpu
+compute_type = "auto"      # auto -> float16 on GPU, int8 on CPU
+language = ""              # "" = auto-detect, or force "ar" / "en"
+multilingual = true        # re-detect language per segment (Arabic/English code-switching)
+beam_size = 5
+vad = true                 # skip silence, reduces hallucinated text
+
+[diarization]
+enabled = true
+model = "pyannote/speaker-diarization-community-1"
+hf_token = ""              # only needed once, to download the model (or set HF_TOKEN)
+min_speakers = 0           # 0 = let the model decide
+max_speakers = 0
+
+[llm]
+# Ollama running on THIS computer. Coord refuses non-local hosts unless
+# privacy.allow_remote_llm = true.
+host = "http://127.0.0.1:11434"
+model = "qwen3:14b"
+num_ctx = 32768            # context window; Ollama's default is too small for meetings
+temperature = 0.1
+think = false              # disable "thinking" output for reasoning models
+chunk_chars = 20000        # long transcripts are split into chunks of this size
+minutes_language = "English"
+timeout_seconds = 900
+
+[privacy]
+# After `coordy setup-models` has downloaded everything, set offline = true:
+# Coord then blocks all model-hub network access.
+offline = false
+allow_remote_llm = false
+redact_emails = true
+redact_phones = true

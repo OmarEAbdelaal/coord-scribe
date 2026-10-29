@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+
+# Never commit meeting data
+*.wav
+*.mp3
+*.m4a
+*.mp4
+*.mkv
+coordy.db
+Coordy/

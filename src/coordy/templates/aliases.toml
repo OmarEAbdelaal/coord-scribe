@@ -1,0 +1,40 @@
+# Coord redaction list.
+#
+# Every `name` and `variants` entry is replaced by its `code` BEFORE anything is
+# stored in the searchable database or shown to Claude. The real names stay in
+# this file and in the raw transcripts on your computer only.
+#
+# Codes must be unique, uppercase letters + digits (P01, ORG01, PRJ01, ...).
+# `role` is shared with Claude so it understands who is who without names.
+# Add Arabic spellings to `variants`; Arabic prefixes (و ب ل ف ك ال) are handled.
+# After editing, run:  coordy redact --all
+
+[[person]]
+name = "Omar Elsayed"
+code = "P01"
+role = "Lead Architect (you)"
+variants = ["Omar", "عمر", "عمر السيد", "م. عمر"]
+
+# [[person]]
+# name = "Ahmed Hassan"
+# code = "P02"
+# role = "MEP Coordinator"
+# variants = ["Ahmed", "أحمد", "احمد"]
+
+# [[org]]
+# name = "Example Developments LLC"
+# code = "ORG01"
+# role = "Client"
+# variants = ["Example Developments"]
+
+# [[project]]
+# name = "Marina Tower"
+# code = "PRJ01"
+# role = "Mixed-use tower, Stage 4 design"
+# variants = ["المارينا"]
+
+# Anything else sensitive: plot numbers, contract values, addresses...
+# [[term]]
+# name = "Plot 245-B"
+# code = "TERM01"
+# role = "Site plot reference"

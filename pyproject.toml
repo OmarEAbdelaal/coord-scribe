@@ -1,0 +1,43 @@
+[project]
+name = "coordy"
+version = "0.1.0"
+description = "Local-first AI meeting intelligence for AECO teams: Arabic/English transcription, speaker detection, redaction, decisions, actions, risks, searchable history, and MCP integration."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+authors = [{ name = "Omar Elsayed" }]
+keywords = ["meetings", "transcription", "whisper", "mcp", "aeco", "bim", "privacy"]
+dependencies = [
+    "faster-whisper>=1.2",
+    "av>=11,<19",  # PyAV 19 breaks faster-whisper 1.2 audio decoding
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "mcp>=2.3,<3",
+]
+
+[project.optional-dependencies]
+# Speaker detection ("who said what"). Install torch from the CUDA index first,
+# see scripts/install.ps1.
+diarize = [
+    "pyannote.audio>=4.0",
+    "torch>=2.8",
+    "torchaudio>=2.8",
+]
+# CUDA 12 runtime for faster-whisper when torch is not a CUDA 12 build.
+gpu = [
+    "nvidia-cublas-cu12>=12.4",
+    "nvidia-cudnn-cu12>=9.1,<10",
+]
+dev = ["pytest>=8"]
+
+[project.scripts]
+coordy = "coordy.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/coordy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
