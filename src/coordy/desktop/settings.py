@@ -7,6 +7,8 @@ from pathlib import Path
 @dataclass
 class DesktopSettings:
     microphone: bool = True
+    speaker_device: str = ""
+    microphone_device: str = ""
     auto_start: bool = False
     auto_stop_seconds: int = 90
     translation: str = "none"

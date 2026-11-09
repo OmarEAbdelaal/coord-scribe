@@ -42,3 +42,7 @@ QCheckBox::indicator:checked { background: $accent; border-color: $accent; image
 
 QLabel#captionHeading { font-size: 15pt; font-weight: 600; }
 QTextBrowser#captionText { font-size: 18pt; padding: 8px; }
+
+QWidget#settingsBody, QScrollArea#settingsScroll { background: $page; border: none; }
+QProgressBar { background: $sunken; border: 1px solid $strong; border-radius: 3px; }
+QProgressBar::chunk { background: $link; border-radius: 2px; }

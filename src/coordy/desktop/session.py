@@ -15,7 +15,10 @@ class CaptureSession:
         self.settings = settings
         self.preferences = preferences
         self.emit = emit
-        self.capture = capture or WindowsCapture(preferences.microphone)
+        self.capture = capture or WindowsCapture(
+            preferences.microphone, preferences.speaker_device, preferences.microphone_device,
+            on_levels=lambda levels: self.emit("audio_levels", levels),
+            on_devices=lambda devices: self.emit("audio_devices", devices))
         self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary())
         self.engine = engine or Engine(settings, transcriber=self.transcriber)
         self._translation = preferences.translation

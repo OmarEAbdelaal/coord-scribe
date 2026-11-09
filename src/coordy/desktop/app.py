@@ -13,12 +13,13 @@ from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QMessageBox, QPushButton, QSpinBox, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
+    QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSpinBox, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 
 from ..config import load_settings
 from ..pipeline import Engine
 from ..redact import Redactor
 from .captions import CaptionPanel
+from .capture import list_audio_devices
 from .delivery import Delivery
 from .detection import MeetingDetector, windows_activity
 from .guest import join_guest, provider_for
@@ -57,10 +58,14 @@ class Preferences(QDialog):
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("Desktop settings")
-        self.resize(600, 600)
+        self.resize(700, min(760, parent.screen().availableGeometry().height() - 80))
         self.preferences = parent.preferences
         layout = QVBoxLayout(self)
+        body = QWidget()
+        body.setObjectName("settingsBody")
+        body_layout = QVBoxLayout(body)
         form = QFormLayout()
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.controls = {}
         for key, label in [("microphone", "Include my microphone"), ("auto_start", "Automatically capture detected meetings"),
                            ("auto_send", "Send completed minutes automatically")]:
@@ -68,6 +73,27 @@ class Preferences(QDialog):
             control.setChecked(getattr(self.preferences, key))
             self.controls[key] = control
             form.addRow(control)
+        for key, label, default in [
+            ("speaker_device", "Meeting audio output", "Windows default output"),
+            ("microphone_device", "Microphone input", "Windows default microphone"),
+        ]:
+            control = QComboBox()
+            control.setAccessibleName(label)
+            control.setMinimumContentsLength(20)
+            control.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            control.addItem(default, "")
+            saved = getattr(self.preferences, key)
+            if saved:
+                control.addItem(saved, saved)
+                control.setCurrentIndex(1)
+            self.controls[key] = control
+            form.addRow(label, control)
+        self.device_note = QLabel("Computer sound is always captured. Select the speaker or headset your meeting uses; it may differ from the Windows default output.")
+        self.device_note.setWordWrap(True)
+        self.device_note.setObjectName("muted")
+        form.addRow(self.device_note)
+        self.refresh_audio = button("Refresh audio devices", self.refresh_devices)
+        form.addRow(self.refresh_audio)
         for key, label, options in [("translation", "Live translation", ["none", "Arabic", "English"]),
                                      ("delivery", "Delivery channel", ["teams", "email"])]:
             control = QComboBox()
@@ -85,19 +111,55 @@ class Preferences(QDialog):
             control = QLineEdit(getattr(self.preferences, key))
             self.controls[key] = control
             form.addRow(label, control)
-        layout.addLayout(form)
+        body_layout.addLayout(form)
         note = QLabel("Delivery credentials come from COORDY_TEAMS_WEBHOOK or COORDY_SMTP_PASSWORD.\nSet these in your Windows user environment before launching.\nOnly redacted minutes are sent. Automatic capture and delivery are opt-in.\nModel and privacy options remain in config.toml.")
         note.setWordWrap(True)
         note.setObjectName("muted")
-        layout.addWidget(note)
+        body_layout.addWidget(note)
+        body_layout.addStretch()
+        scroll = QScrollArea()
+        scroll.setObjectName("settingsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(body)
+        layout.addWidget(scroll)
         actions = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         actions.accepted.connect(self.accept)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
+        if sys.platform == "win32":
+            self.refresh_devices()
+        else:
+            self.refresh_audio.setEnabled(False)
+
+    def refresh_devices(self):
+        self.refresh_audio.setEnabled(False)
+        self.device_note.setText("Checking Windows audio outputs and microphones…")
+        self.parent().spawn(lambda emit: list_audio_devices(), self.populate_devices, self.device_error)
+
+    def populate_devices(self, catalog):
+        for key, kind, default in [
+            ("speaker_device", "speakers", "Windows default output"),
+            ("microphone_device", "microphones", "Windows default microphone"),
+        ]:
+            control = self.controls[key]
+            selected = control.currentData()
+            control.clear()
+            control.addItem(default, "")
+            for name in sorted({device["name"] for device in catalog[kind]}):
+                control.addItem(name, name)
+            if selected and control.findData(selected) < 0:
+                control.addItem(f"Unavailable: {selected}", selected)
+            control.setCurrentIndex(max(0, control.findData(selected)))
+        self.device_note.setText("Computer sound is always captured. Match Meeting audio output to the speaker/headset selected in Teams, Zoom, or Windows Volume mixer. Restart capture after changing devices.")
+        self.refresh_audio.setEnabled(True)
+
+    def device_error(self, message):
+        self.device_note.setText("Could not list audio devices: " + message)
+        self.refresh_audio.setEnabled(True)
 
     def accept(self):
         for key, control in self.controls.items():
-            value = control.isChecked() if isinstance(control, QCheckBox) else control.value() if isinstance(control, QSpinBox) else control.currentText() if isinstance(control, QComboBox) else control.text().strip()
+            value = control.currentData() if key in {"speaker_device", "microphone_device"} else control.isChecked() if isinstance(control, QCheckBox) else control.value() if isinstance(control, QSpinBox) else control.currentText() if isinstance(control, QComboBox) else control.text().strip()
             setattr(self.preferences, key, value)
         super().accept()
 
@@ -217,7 +279,20 @@ class Window(QMainWindow):
         footer = QLabel("Whisper large-v3  /  Ollama local minutes  /  Redacted delivery\nRecording is visible here. Inform participants and follow your meeting policy.")
         footer.setObjectName("muted")
         content.addWidget(footer)
-        self.statusBar().showMessage("Ready. Install local models before your first capture.")
+        self.computer_level = QProgressBar()
+        self.mic_level = QProgressBar()
+        for label, meter in [("Computer sound", self.computer_level), ("Mic", self.mic_level)]:
+            meter.setRange(0, 100)
+            meter.setValue(0)
+            meter.setTextVisible(False)
+            meter.setFixedSize(70, 10)
+            meter.setAccessibleName(label + " level")
+            self.statusBar().addPermanentWidget(QLabel(label))
+            self.statusBar().addPermanentWidget(meter)
+        self.computer_level.setToolTip("Computer sound from the selected speaker/headset loopback")
+        self.mic_level.setToolTip("Optional microphone source")
+        self.audio_silent = False
+        self.statusBar().showMessage("Ready. Match the meeting output device in Settings.")
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.poll_detection)
         self.timer.start(3000)
@@ -252,7 +327,20 @@ class Window(QMainWindow):
         self.update_controls()
 
     def on_event(self, kind, value):
-        if kind == "status":
+        if kind == "audio_devices":
+            self.computer_level.setToolTip("Computer sound: " + value["computer"])
+            self.mic_level.setToolTip("Microphone: " + (value["microphone"] or "Off"))
+            self.mic_level.setEnabled(value["microphone"] is not None)
+        elif kind == "audio_levels":
+            self.computer_level.setValue(value["computer"])
+            self.mic_level.setValue(value["microphone"] or 0)
+            silent = value["computer_silent_seconds"] >= 10
+            if silent and not self.audio_silent:
+                self.statusBar().showMessage("No computer sound for 10s. If the meeting is playing, check Settings > Meeting audio output.")
+            elif not silent and self.audio_silent:
+                self.statusBar().showMessage("Computer sound received.")
+            self.audio_silent = silent
+        elif kind == "status":
             self.badge.setText(str(value))
             self.statusBar().showMessage(str(value))
         elif kind == "transcript":
@@ -274,6 +362,9 @@ class Window(QMainWindow):
         if self.busy:
             return
         self.settings = load_settings()
+        self.computer_level.setValue(0)
+        self.mic_level.setValue(0)
+        self.audio_silent = False
         self.captions.reset()
         self.tabs.setCurrentWidget(self.captions)
         self.transcript.clear()
@@ -299,6 +390,8 @@ class Window(QMainWindow):
             self.badge.setText("STOPPING  /  Finishing transcript and minutes")
 
     def capture_failed(self, message):
+        self.computer_level.setValue(0)
+        self.mic_level.setValue(0)
         self.session = None
         self.set_busy(False)
         self.badge.setText("ATTENTION  /  Processing failed; audio retained locally")
@@ -306,6 +399,8 @@ class Window(QMainWindow):
         self.show_error(message)
 
     def completed(self, mid):
+        self.computer_level.setValue(0)
+        self.mic_level.setValue(0)
         self.session = None
         self.current_meeting = mid
         self.set_busy(False)

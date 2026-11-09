@@ -145,3 +145,31 @@ def test_live_caption_language_can_change_during_capture(settings):
     window.session = None
     window.set_busy(False)
     window.close()
+
+
+def test_audio_device_selection_persists_and_source_meters_are_independent(settings):
+    from coordy.desktop.app import Preferences
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    dialog = Preferences(window)
+    dialog.populate_devices({'speakers': [{'name': 'Meeting headset [Loopback]'}],
+                             'microphones': [{'name': 'USB microphone'}]})
+    dialog.controls['speaker_device'].setCurrentIndex(1)
+    dialog.controls['microphone_device'].setCurrentIndex(1)
+    dialog.accept()
+    assert window.preferences.speaker_device == 'Meeting headset [Loopback]'
+    assert window.preferences.microphone_device == 'USB microphone'
+    dialog = Preferences(window)
+    dialog.populate_devices({'speakers': [], 'microphones': []})
+    assert dialog.controls['speaker_device'].currentData() == 'Meeting headset [Loopback]'
+    assert 'Unavailable' in dialog.controls['speaker_device'].currentText()
+    dialog.reject()
+    window.on_event('audio_devices', {'computer': 'Meeting headset', 'microphone': 'USB mic'})
+    assert 'Meeting headset' in window.computer_level.toolTip()
+    window.on_event('audio_levels', {'computer': 0, 'microphone': 80, 'computer_silent_seconds': 10})
+    assert window.computer_level.value() == 0 and window.mic_level.value() == 80
+    assert 'No computer sound' in window.statusBar().currentMessage()
+    window.on_event('audio_levels', {'computer': 60, 'microphone': 0, 'computer_silent_seconds': 0})
+    assert window.computer_level.value() == 60
+    assert window.statusBar().currentMessage() == 'Computer sound received.'
+    window.close()

@@ -42,12 +42,16 @@ Edit `aliases.toml` before sharing minutes. Only the redacted view is shown and 
 
 ## Capture and detection
 
-1. Select the Windows output device used by the meeting before capture starts. Choose whether to include your microphone in desktop settings. Audio device switching mid-recording is not supported; stop and start again after changing devices.
+1. Open **Settings → Meeting audio output** and select the speaker or headset used by Teams/Zoom/your browser. Click **Refresh audio devices** after connecting or switching devices. The Windows default output can differ from a meeting app’s communications output. Select **Microphone input** separately and choose whether to **Include my microphone**. Computer sound is always captured, including when the microphone is disabled. Stop and start capture after changing devices.
 2. Click **Start capture**, or opt into **Detect meetings and presentations**.
 3. Live text appears in roughly ten-second chunks. Final minutes are produced after **Stop and summarise**. Audio is streamed to disk while recording.
 4. Review the transcript, translation and minutes. Export Markdown or send to your configured destination.
 
 Detection checks active Windows audio sessions for Teams, Zoom and Webex. Browser sessions also need a meeting-like window title. PowerPoint slide-show windows are detected separately. Detection requires two positive polls and uses a 90-second stop grace period (configurable) to tolerate short silences. This is a heuristic: it cannot reliably distinguish every meeting from notifications, inactive browser tabs or presentations. Continuous audio activity can delay stopping; use Stop manually. Concurrent meetings are recorded together. Automatic capture and delivery are disabled by default, and the app stays visibly open while recording or processing. Tell participants that recording is taking place.
+
+The status bar has separate **Computer sound** and **Mic** meters, measured before mixing. Hover over each meter to see its selected device. If computer sound stays silent for ten seconds, the app suggests checking the output selection. Normal meeting silence can also trigger that notice. An unplugged saved device produces an error rather than silently switching to another endpoint.
+
+To diagnose a mic-only recording: play meeting audio, stop capture, choose that exact output in Settings, turn **Include my microphone** off, and start capture again. The **Computer sound** meter should move. If it does not, check the meeting application's speaker/output setting and Windows **System → Sound → Volume mixer**. Bluetooth devices can switch between stereo and hands-free endpoints when a call starts; refresh/select the endpoint in use during the meeting. After confirming computer audio, re-enable the microphone if needed.
 
 Capture uses WASAPI loopback and includes **all audio** on that speaker device, not just a particular meeting. Keep unrelated applications quiet and use headphones to reduce duplicate mic pickup. The microphone and speaker streams are mixed; this does not provide per-participant tracks. Hardware clock drift and echo need real-device testing. Recordings are retained on processing errors and can be imported again after correcting the model/configuration issue.
 
