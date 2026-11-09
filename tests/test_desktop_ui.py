@@ -136,7 +136,10 @@ def test_live_caption_language_can_change_during_capture(settings):
     assert not window.captions.translated.toPlainText()
     window.on_event('transcript', {**source, 'start': 20, 'end': 25})
     window.on_event('translation', {**source, 'language': 'English', 'text': 'Earlier segment'})
-    assert not window.captions.translated.toPlainText()
+    assert window.captions.translated.toPlainText() == 'Earlier segment'
+    assert '00:12' in window.captions.translation_status.text()
+    window.on_event('translation', {**source, 'start': 1, 'language': 'English', 'text': 'Out of order'})
+    assert window.captions.translated.toPlainText() == 'Earlier segment'
     window.on_event('caption_translation_error', {'start': 20, 'end': 25, 'language': 'English'})
     assert 'recording and original captions continue' in window.captions.translated.toPlainText()
     window.captions.target.setCurrentIndex(0)

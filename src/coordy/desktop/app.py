@@ -103,13 +103,14 @@ class Preferences(QDialog):
             control.setCurrentText(getattr(self.preferences, key))
             self.controls[key] = control
             form.addRow(label, control)
-        for key, label in [("auto_stop_seconds", "Detection stop grace (seconds)"), ("smtp_port", "SMTP STARTTLS port")]:
+        for key, label in [("auto_stop_seconds", "Detection stop grace (seconds)"), ("smtp_port", "SMTP STARTTLS port"), ("caption_chunk_seconds", "Caption window (seconds)")]:
             control = QSpinBox()
-            control.setRange(30 if key == "auto_stop_seconds" else 1, 3600 if key == "auto_stop_seconds" else 65535)
+            low, high = {"auto_stop_seconds": (30, 3600), "smtp_port": (1, 65535), "caption_chunk_seconds": (2, 10)}[key]
+            control.setRange(low, high)
             control.setValue(getattr(self.preferences, key))
             self.controls[key] = control
             form.addRow(label, control)
-        for key, label in [("smtp_host", "SMTP host"), ("smtp_user", "SMTP username"), ("sender", "Sender email"), ("recipients", "Recipients (comma separated)")]:
+        for key, label in [("caption_model", "Caption model (blank = minutes model)"), ("smtp_host", "SMTP host"), ("smtp_user", "SMTP username"), ("sender", "Sender email"), ("recipients", "Recipients (comma separated)")]:
             control = QLineEdit(getattr(self.preferences, key))
             self.controls[key] = control
             form.addRow(label, control)
@@ -254,7 +255,7 @@ class Window(QMainWindow):
             guest.addWidget(widget)
         content.addLayout(guest)
         self.tabs = QTabWidget()
-        self.captions = CaptionPanel(self.preferences.translation)
+        self.captions = CaptionPanel(self.preferences.translation, chunk_seconds=self.preferences.caption_chunk_seconds)
         self.captions.translation_changed.connect(self.change_caption_translation)
         self.tabs.addTab(self.captions, "Live captions")
         self.transcript = QTextBrowser()
@@ -263,7 +264,7 @@ class Window(QMainWindow):
         for label, browser in [("Live transcript", self.transcript), ("Translation", self.translation), ("Minutes and actions", self.minutes)]:
             browser.setOpenExternalLinks(False)
             self.tabs.addTab(browser, label)
-        self.transcript.setPlaceholderText("Arabic and English speech appears here in approximately 10-second chunks.\nSystem audio captures all sounds on the selected Windows output device.")
+        self.transcript.setPlaceholderText("Arabic and English speech appears here in short audio chunks.\nSystem audio captures all sounds on the selected Windows output device.")
         self.translation.setPlaceholderText("Choose Arabic or English in Live captions or Settings. Translation uses local Ollama.")
         self.minutes.setPlaceholderText("Stop a recording to generate summary, decisions, actions, risks and open questions.")
         content.addWidget(self.tabs, 1)
@@ -369,6 +370,8 @@ class Window(QMainWindow):
         elif kind == "translation":
             self.captions.show_translation(value)
             self.translation.append(f'<p dir="auto">{html.escape(value["language"])} · {html.escape(value["text"])}</p>')
+        elif kind == "translation_state":
+            self.captions.translation_status.setText(str(value))
         elif kind == "caption_translation_error":
             self.captions.show_translation_error(value)
         elif kind in {"guest", "guest_joined"}:
@@ -384,7 +387,7 @@ class Window(QMainWindow):
         self.computer_level.setValue(0)
         self.mic_level.setValue(0)
         self.audio_silent = False
-        self.speech_state = {"message": "Recording audio; first chunk is sent to Whisper after about 10 seconds", "busy": False}
+        self.speech_state = {"message": "Recording audio; first chunk is sent to Whisper after the configured caption window", "busy": False}
         self.update_speech_progress()
         self.captions.reset()
         self.tabs.setCurrentWidget(self.captions)
@@ -492,6 +495,7 @@ class Window(QMainWindow):
         if Preferences(self).exec() == QDialog.DialogCode.Accepted:
             self.preferences.save(self.settings.paths.root)
             self.captions.target.setCurrentIndex(self.captions.target.findData(self.preferences.translation))
+            self.captions.notice.setText(f"Audio window: {self.preferences.caption_chunk_seconds}s plus model processing. Translation runs separately.")
             self.detector.grace = self.preferences.auto_stop_seconds
             self.monitor.setChecked(self.preferences.auto_start)
             self.channel.setCurrentText(self.preferences.delivery)

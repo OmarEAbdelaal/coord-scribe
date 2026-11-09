@@ -76,7 +76,8 @@ def select_device(audio, name, kind):
 
 class WindowsCapture:
     def __init__(self, microphone=True, speaker_device="", microphone_device="", *,
-                 on_levels=lambda levels: None, on_devices=lambda devices: None):
+                 on_levels=lambda levels: None, on_devices=lambda devices: None, chunk_seconds=4):
+        self.chunk_seconds = max(2, min(10, int(chunk_seconds)))
         self.microphone = microphone
         self.speaker_device = speaker_device
         self.microphone_device = microphone_device
@@ -172,7 +173,7 @@ class WindowsCapture:
                             speaker_peak = mic_peak = 0.0
                         pending.append(block)
                         count += len(block)
-                        if count >= RATE * 10:
+                        if count >= RATE * self.chunk_seconds:
                             chunk = np.concatenate(pending)
                             on_chunk(chunk, offset)
                             offset += len(chunk) / RATE

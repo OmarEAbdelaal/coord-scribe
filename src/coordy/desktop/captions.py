@@ -6,9 +6,10 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QTextBrowser, QVBo
 class CaptionPanel(QWidget):
     translation_changed = Signal(str)
 
-    def __init__(self, target="none", parent=None):
+    def __init__(self, target="none", parent=None, chunk_seconds=4):
         super().__init__(parent)
         self.segment = None
+        self.translation_time = -1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
@@ -25,7 +26,7 @@ class CaptionPanel(QWidget):
         self.target.setCurrentIndex(max(0, self.target.findData(target)))
         controls.addWidget(self.target)
         layout.addLayout(controls)
-        self.notice = QLabel("Captions appear in approximately 10-second chunks. Translation uses local Ollama.")
+        self.notice = QLabel(f"Audio window: {chunk_seconds}s plus model processing. Translation runs separately.")
         self.notice.setObjectName("muted")
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -42,6 +43,9 @@ class CaptionPanel(QWidget):
         layout.addWidget(self.original, 1)
         self.translated_label = QLabel("Translation")
         layout.addWidget(self.translated_label)
+        self.translation_status = QLabel("")
+        self.translation_status.setObjectName("muted")
+        layout.addWidget(self.translation_status)
         self.translated = QTextBrowser()
         self.translated.setObjectName("captionText")
         self.translated.setMinimumHeight(90)
@@ -58,6 +62,9 @@ class CaptionPanel(QWidget):
         enabled = self.language != "none"
         self.translated.setVisible(enabled)
         self.translated_label.setVisible(enabled)
+        self.translation_status.setVisible(enabled)
+        self.translation_status.clear()
+        self.translation_time = -1
         self.translated_label.setText(f"Translation · {self.language}")
         self.translated.clear()
         self.translated.setPlaceholderText("Waiting for the next translated speech segment…")
@@ -68,6 +75,8 @@ class CaptionPanel(QWidget):
 
     def reset(self):
         self.segment = None
+        self.translation_time = -1
+        self.translation_status.clear()
         self.original.clear()
         self.translated.clear()
         self.timestamp.setText("Waiting for speech")
@@ -75,16 +84,19 @@ class CaptionPanel(QWidget):
     def show_segment(self, segment):
         self.segment = (segment["start"], segment["end"])
         self.original.setPlainText(segment["text"])
-        self.translated.clear()
         seconds = int(segment["start"])
         language = segment.get("language") or "auto"
         self.timestamp.setText(f"{seconds // 60:02}:{seconds % 60:02} · {language}")
 
     def show_translation(self, segment):
-        # Ignore late replies after the user changes language or a newer caption arrives.
-        if self.language == segment.get("language") and self.segment == (segment["start"], segment["end"]):
+        # Keep the newest completed translation visible with its own timestamp.
+        if self.language == segment.get("language") and segment["start"] >= self.translation_time:
+            self.translation_time = segment["start"]
+            seconds = int(segment["start"])
+            self.translation_status.setText(f"Translated audio at {seconds // 60:02}:{seconds % 60:02}")
             self.translated.setPlainText(segment["text"])
 
     def show_translation_error(self, segment):
-        if self.language == segment.get("language") and self.segment == (segment["start"], segment["end"]):
+        if self.language == segment.get("language") and segment["start"] >= self.translation_time:
+            self.translation_status.setText("Translation failed")
             self.translated.setPlainText("Translation unavailable. Check local Ollama; recording and original captions continue.")

@@ -85,6 +85,10 @@ def run_capture(tmp_path, speaker, microphone, ticks=1, stalled=()):
     with wave.open(str(output)) as wav:
         assert wav.getframerate() == 16000 and wav.getnchannels() == 1
         samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype='<i2').astype(float)
+    if ticks >= 20:
+        # Ten seconds now reaches ASR as 4s + 4s + 2s, with no gaps in offsets.
+        assert [offset for samples, offset in chunks] == [0, 4, 8]
+        assert [len(samples) for samples, offset in chunks] == [64000, 64000, 32000]
     assert audio.terminated and all(stream.closed for stream in audio.streams)
     return audio, levels, devices, samples
 

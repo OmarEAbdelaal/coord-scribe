@@ -203,6 +203,7 @@ def test_setup_models_failure_exits_nonzero(monkeypatch):
 def test_live_caption_translation_switching_and_failure_isolation(settings, engine, fake_ollama, translation_fails):
     from tests.conftest import MINUTES
     events = []
+    first_translation = threading.Event()
     class Capture:
         def stop(self):
             pass
@@ -210,6 +211,7 @@ def test_live_caption_translation_switching_and_failure_isolation(settings, engi
             write_wav(path)
             on_ready()
             on_chunk(np.zeros(16000, np.float32), 0)
+            assert first_translation.wait(3)
             on_chunk(np.zeros(16000, np.float32), 1)
     class Speech:
         def transcribe(self, audio):
@@ -224,6 +226,7 @@ def test_live_caption_translation_switching_and_failure_isolation(settings, engi
         events.append((kind, value))
         if kind in {'translation', 'caption_translation_error'}:
             session.set_translation('Arabic')
+            first_translation.set()
     session = CaptureSession(settings, DesktopSettings(translation='English'), emit,
                              capture=Capture(), transcriber=Speech(), engine=engine)
     mid = session.run()
@@ -255,3 +258,68 @@ def test_short_capture_reports_duration_without_loading_whisper(settings, engine
     with pytest.raises(RuntimeError, match='only 0.10 seconds'):
         session.run()
     speech.transcribe.assert_not_called()
+
+
+def test_slow_translation_does_not_block_captions_and_pending_work_is_bounded(settings, engine, fake_ollama):
+    from tests.conftest import MINUTES
+    translating = threading.Event()
+    release = threading.Event()
+    newest_transcribed = threading.Event()
+    events = []
+    requests = []
+    class Capture:
+        def stop(self):
+            pass
+        def record(self, path, on_chunk, on_ready):
+            write_wav(path, seconds=3)
+            on_chunk(np.zeros(16000, np.float32), 0)
+            try:
+                assert translating.wait(3)
+                on_chunk(np.zeros(16000, np.float32), 1)
+                on_chunk(np.zeros(16000, np.float32), 2)
+                assert newest_transcribed.wait(3), 'Translation blocked new speech'
+            finally:
+                release.set()
+    class Speech:
+        def transcribe(self, audio):
+            return [Segment(0, .5, 'Omar Elsayed agreed', language='en')]
+    def reply(body):
+        if body['messages'][0]['content'].startswith('Translate'):
+            requests.append(body)
+            if len(requests) == 1:
+                translating.set()
+                assert release.wait(5)
+            return {'text': 'P01 وافق'}
+        return MINUTES
+    def emit(kind, value):
+        events.append((kind, value))
+        # The translation queue is filled immediately after transcript emission;
+        # signal on speech_state for a later chunk is unnecessary: synchronize
+        # on queue submission below to ensure replacement has happened.
+    fake_ollama.reply = reply
+    session = CaptureSession(settings, DesktopSettings(translation='Arabic'), emit,
+                             capture=Capture(), transcriber=Speech(), engine=engine)
+    offer = session._offer_latest
+    def observed_offer(pending, item):
+        dropped = offer(pending, item)
+        if pending is session.translation_queue and item['start'] == 2:
+            newest_transcribed.set()
+        return dropped
+    session._offer_latest = observed_offer
+    mid = session.run()
+    assert engine.store.meeting(mid)['status'] == 'done'
+    assert [v['start'] for k, v in events if k == 'transcript'] == [0, 1, 2]
+    assert [v['start'] for k, v in events if k == 'translation'] == [0, 2]
+    assert all(body['options']['num_predict'] == 256 for body in requests)
+
+
+def test_live_caption_client_uses_smaller_context_and_timeout(settings):
+    session = CaptureSession(settings, DesktopSettings(caption_model='qwen3:4b'), lambda *args: None)
+    try:
+        assert session.caption_llm.settings.model == 'qwen3:4b'
+        assert session.caption_llm.settings.num_ctx == 2048
+        assert session.caption_llm.settings.timeout_seconds == 20
+        assert session.transcriber.settings.beam_size == 1
+        assert settings.whisper.beam_size == 5
+    finally:
+        session.caption_llm.close()

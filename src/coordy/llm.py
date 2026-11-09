@@ -61,7 +61,10 @@ class Ollama:
                     if progress:
                         progress(event)
 
-    def chat_json(self, system: str, user: str, schema: dict) -> dict:
+    def close(self):
+        self._client.close()
+
+    def chat_json(self, system: str, user: str, schema: dict, *, max_tokens: int | None = None) -> dict:
         """Chat with structured output: the reply is forced to match `schema`."""
         s = self.settings
         body = {
@@ -72,6 +75,8 @@ class Ollama:
             "options": {"num_ctx": s.num_ctx, "temperature": s.temperature},
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
         }
+        if max_tokens is not None:
+            body["options"]["num_predict"] = max_tokens
         r = self._client.post("/api/chat", json=body)
         if r.status_code == 400 and "think" in r.text.lower():
             # Older Ollama or a model without a thinking switch.

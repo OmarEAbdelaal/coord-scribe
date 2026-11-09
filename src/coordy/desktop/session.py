@@ -5,9 +5,11 @@ import wave
 import logging
 import threading
 from datetime import datetime
+from dataclasses import replace
 import uuid
 
 from ..pipeline import Engine
+from ..llm import Ollama
 from ..transcribe import Transcriber
 from .capture import WindowsCapture
 
@@ -22,13 +24,19 @@ class CaptureSession:
         self.capture = capture or WindowsCapture(
             preferences.microphone, preferences.speaker_device, preferences.microphone_device,
             on_levels=lambda levels: self.emit("audio_levels", levels),
-            on_devices=lambda devices: self.emit("audio_devices", devices))
-        self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary(),
+            on_devices=lambda devices: self.emit("audio_devices", devices),
+            chunk_seconds=preferences.caption_chunk_seconds)
+        self.transcriber = transcriber or Transcriber(replace(settings.whisper, beam_size=1), settings.glossary(),
             status=lambda message: self.emit("speech_state", {"message": message, "busy": True}))
         self.engine = engine or Engine(settings, transcriber=self.transcriber)
         self._translation = preferences.translation
         self._translation_lock = threading.Lock()
-        self.chunks = queue.Queue(maxsize=6)
+        self.chunks = queue.Queue(maxsize=2)
+        self.translation_queue = queue.Queue(maxsize=1)
+        self._owns_caption_llm = engine is None
+        self.caption_llm = engine.llm if engine is not None else Ollama(
+            replace(settings.llm, model=preferences.caption_model or settings.llm.model,
+                    num_ctx=2048, timeout_seconds=20, think=False), settings.privacy)
         self.segments = []
         self.translations = []
         self.failure = None
@@ -69,23 +77,8 @@ class CaptureSession:
                     with self._translation_lock:
                         target = self._translation
                     if target in {"Arabic", "English"}:
-                        caption = {"start": segment.start, "end": segment.end, "language": target}
-                        try:
-                            self.emit("speech_state", {"message": "Translating captions with local Ollama", "busy": True})
-                            translated = self.engine.llm.chat_json(
-                                f"Translate the text into {target}. Preserve codes such as P01. Return JSON with text.",
-                                text, {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
-                            text = self.engine.redactor().guard(translated).get("text", "")
-                            if not isinstance(text, str) or not text.strip():
-                                raise ValueError("Empty caption translation")
-                            caption["text"] = text
-                            self.translations.append(caption)
-                            self.emit("translation", caption)
-                        except Exception:
-                            # Optional translation must not stop capture or discard speech.
-                            self.emit("caption_translation_error", caption)
-                        finally:
-                            self.emit("speech_state", {"message": "Waiting for the next audio chunk", "busy": False})
+                        caption = {"start": segment.start, "end": segment.end, "language": target, "source": text}
+                        self._offer_latest(self.translation_queue, caption)
 
             except Exception as exc:
                 self.failure = exc
@@ -93,23 +86,71 @@ class CaptureSession:
             finally:
                 self.chunks.task_done()
 
+    @staticmethod
+    def _offer_latest(pending, item):
+        dropped = False
+        while True:
+            try:
+                pending.put_nowait(item)
+                return dropped
+            except queue.Full:
+                try:
+                    pending.get_nowait()
+                    pending.task_done()
+                    dropped = True
+                except queue.Empty:
+                    pass
+
+    def _translate(self):
+        try:
+            while True:
+                caption = self.translation_queue.get()
+                try:
+                    if caption is None:
+                        return
+                    with self._translation_lock:
+                        target = self._translation
+                    if target != caption["language"]:
+                        continue
+                    self.emit("translation_state", "Translating latest caption…")
+                    translated = self.caption_llm.chat_json(
+                        f"Translate the text into {target}. Preserve codes such as P01. Return JSON with text.",
+                        caption["source"], {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+                        max_tokens=256)
+                    text = self.engine.redactor().guard(translated).get("text", "")
+                    if not isinstance(text, str) or not text.strip():
+                        raise ValueError("Empty caption translation")
+                    result = {key: value for key, value in caption.items() if key != "source"}
+                    result["text"] = text
+                    self.translations.append(result)
+                    self.emit("translation", result)
+                except Exception:
+                    self.emit("caption_translation_error", caption)
+                finally:
+                    self.translation_queue.task_done()
+        finally:
+            if self._owns_caption_llm:
+                self.caption_llm.close()
+
     def run(self):
         title = datetime.now().strftime("Meeting %Y-%m-%d %H-%M-%S")
         path = self.settings.paths.inbox / f"{title}-{uuid.uuid4().hex[:6]}.wav"
         consumer = threading.Thread(target=self._consume, name="coord-live-transcription", daemon=True)
+        translator = threading.Thread(target=self._translate, name="coord-caption-translation", daemon=True)
+        translator.start()
         consumer.start()
         def chunk(audio, offset):
-            try:
-                self.chunks.put_nowait((audio, offset))
-            except queue.Full:
+            if self._offer_latest(self.chunks, (audio, offset)):
                 self.incomplete = True
-                self.emit("status", "Live transcription is behind. Full recording will be transcribed after stop.")
+                self.emit("status", "Live captions are behind; catching up to recent audio. Full recording will be transcribed after stop.")
         try:
             self.capture.record(path, chunk, lambda: self.emit("status", "Recording speaker audio" + (" and microphone" if self.preferences.microphone else "")))
         finally:
             self.emit("status", "Finishing transcript…")
             self.chunks.put(None)
             consumer.join()
+            self.translation_queue.put(None)
+            translator.join()
         with wave.open(str(path), "rb") as recorded:
             duration = recorded.getnframes() / recorded.getframerate()
         if duration < 1:
@@ -118,6 +159,8 @@ class CaptureSession:
             raise RuntimeError(f"Live processing failed; recording retained at {path}. {self.failure}")
         self.emit("speech_state", {"message": "Transcription complete; generating minutes", "busy": False})
         self.emit("status", "Generating local minutes…")
+        if isinstance(self.transcriber, Transcriber):
+            self.transcriber.settings = self.settings.whisper
         segments = None if self.incomplete else self.segments
         mid = self.engine.process(path, title=title, segments=segments,
                                   stage=lambda name, frac=None: self.emit("status", name))

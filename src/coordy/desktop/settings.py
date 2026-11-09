@@ -12,6 +12,8 @@ class DesktopSettings:
     auto_start: bool = False
     auto_stop_seconds: int = 90
     translation: str = "none"
+    caption_chunk_seconds: int = 4
+    caption_model: str = ""
     auto_send: bool = False
     delivery: str = "teams"
     smtp_host: str = ""
