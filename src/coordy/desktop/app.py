@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDia
 from ..config import load_settings
 from ..pipeline import Engine
 from ..redact import Redactor
+from .captions import CaptionPanel
 from .delivery import Delivery
 from .detection import MeetingDetector, windows_activity
 from .guest import join_guest, provider_for
@@ -150,7 +151,7 @@ class Window(QMainWindow):
         outer.addWidget(sidebar)
         content = QVBoxLayout()
         content.setContentsMargins(28, 28, 28, 20)
-        content.setSpacing(16)
+        content.setSpacing(10)
         outer.addLayout(content, 1)
         heading = QLabel("Meeting workspace")
         heading.setObjectName("heading")
@@ -189,6 +190,9 @@ class Window(QMainWindow):
             guest.addWidget(widget)
         content.addLayout(guest)
         self.tabs = QTabWidget()
+        self.captions = CaptionPanel(self.preferences.translation)
+        self.captions.translation_changed.connect(self.change_caption_translation)
+        self.tabs.addTab(self.captions, "Live captions")
         self.transcript = QTextBrowser()
         self.translation = QTextBrowser()
         self.minutes = QTextBrowser()
@@ -196,7 +200,7 @@ class Window(QMainWindow):
             browser.setOpenExternalLinks(False)
             self.tabs.addTab(browser, label)
         self.transcript.setPlaceholderText("Arabic and English speech appears here in approximately 10-second chunks.\nSystem audio captures all sounds on the selected Windows output device.")
-        self.translation.setPlaceholderText("Enable Arabic or English translation in settings. Translation uses local Ollama.")
+        self.translation.setPlaceholderText("Choose Arabic or English in Live captions or Settings. Translation uses local Ollama.")
         self.minutes.setPlaceholderText("Stop a recording to generate summary, decisions, actions, risks and open questions.")
         content.addWidget(self.tabs, 1)
         share = QHBoxLayout()
@@ -252,10 +256,14 @@ class Window(QMainWindow):
             self.badge.setText(str(value))
             self.statusBar().showMessage(str(value))
         elif kind == "transcript":
+            self.captions.show_segment(value)
             stamp = f"{value['start'] // 60:02.0f}:{value['start'] % 60:02.0f}"
             self.transcript.append(f'<p><span style="font-family:monospace">{stamp} · {html.escape(value["language"])}</span><br><span dir="auto">{html.escape(value["text"])}</span></p>')
         elif kind == "translation":
-            self.translation.append(f'<p dir="auto">{html.escape(str(value))}</p>')
+            self.captions.show_translation(value)
+            self.translation.append(f'<p dir="auto">{html.escape(value["language"])} · {html.escape(value["text"])}</p>')
+        elif kind == "caption_translation_error":
+            self.captions.show_translation_error(value)
         elif kind in {"guest", "guest_joined"}:
             self.statusBar().showMessage(str(value))
             if kind == "guest_joined" and not self.busy and sys.platform == "win32":
@@ -266,6 +274,8 @@ class Window(QMainWindow):
         if self.busy:
             return
         self.settings = load_settings()
+        self.captions.reset()
+        self.tabs.setCurrentWidget(self.captions)
         self.transcript.clear()
         self.translation.clear()
         self.minutes.clear()
@@ -343,8 +353,15 @@ class Window(QMainWindow):
         translations = self.settings.paths.redacted / f"{mid}.translation.json"
         if translations.exists():
             for entry in json.loads(translations.read_text(encoding="utf-8")):
-                self.translation.append(html.escape(engine.redactor().redact(entry["text"])))
+                label = f"{entry["language"]} · " if entry.get("language") else ""
+                self.translation.append(html.escape(engine.redactor().redact(label + entry["text"])))
         self.update_controls()
+
+    def change_caption_translation(self, language):
+        self.preferences.translation = language
+        self.preferences.save(self.settings.paths.root)
+        if self.session:
+            self.session.set_translation(language)
 
     def edit_preferences(self):
         if self.busy:
@@ -352,6 +369,7 @@ class Window(QMainWindow):
             return
         if Preferences(self).exec() == QDialog.DialogCode.Accepted:
             self.preferences.save(self.settings.paths.root)
+            self.captions.target.setCurrentIndex(self.captions.target.findData(self.preferences.translation))
             self.detector.grace = self.preferences.auto_stop_seconds
             self.monitor.setChecked(self.preferences.auto_start)
             self.channel.setCurrentText(self.preferences.delivery)

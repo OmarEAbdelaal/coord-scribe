@@ -18,11 +18,19 @@ class CaptureSession:
         self.capture = capture or WindowsCapture(preferences.microphone)
         self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary())
         self.engine = engine or Engine(settings, transcriber=self.transcriber)
+        self._translation = preferences.translation
+        self._translation_lock = threading.Lock()
         self.chunks = queue.Queue(maxsize=6)
         self.segments = []
         self.translations = []
         self.failure = None
         self.incomplete = False
+
+    def set_translation(self, language):
+        if language not in {"none", "Arabic", "English"}:
+            raise ValueError("Choose none, Arabic or English")
+        with self._translation_lock:
+            self._translation = language
 
     def stop(self):
         self.capture.stop()
@@ -42,13 +50,24 @@ class CaptureSession:
                     self.segments.append(segment)
                     text = self.engine.redactor().redact(segment.text)
                     self.emit("transcript", {**segment.to_dict(), "text": text})
-                    if self.preferences.translation in {"Arabic", "English"}:
-                        translated = self.engine.llm.chat_json(
-                            f"Translate the text into {self.preferences.translation}. Preserve codes such as P01. Return JSON with text.",
-                            text, {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
-                        text = self.engine.redactor().guard(translated).get("text", "")
-                        self.translations.append({"start": segment.start, "end": segment.end, "text": text})
-                        self.emit("translation", text)
+                    with self._translation_lock:
+                        target = self._translation
+                    if target in {"Arabic", "English"}:
+                        caption = {"start": segment.start, "end": segment.end, "language": target}
+                        try:
+                            translated = self.engine.llm.chat_json(
+                                f"Translate the text into {target}. Preserve codes such as P01. Return JSON with text.",
+                                text, {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
+                            text = self.engine.redactor().guard(translated).get("text", "")
+                            if not isinstance(text, str) or not text.strip():
+                                raise ValueError("Empty caption translation")
+                            caption["text"] = text
+                            self.translations.append(caption)
+                            self.emit("translation", caption)
+                        except Exception:
+                            # Optional translation must not stop capture or discard speech.
+                            self.emit("caption_translation_error", caption)
+
             except Exception as exc:
                 self.failure = exc
                 self.capture.stop()

@@ -51,6 +51,12 @@ Detection checks active Windows audio sessions for Teams, Zoom and Webex. Browse
 
 Capture uses WASAPI loopback and includes **all audio** on that speaker device, not just a particular meeting. Keep unrelated applications quiet and use headphones to reduce duplicate mic pickup. The microphone and speaker streams are mixed; this does not provide per-participant tracks. Hardware clock drift and echo need real-device testing. Recordings are retained on processing errors and can be imported again after correcting the model/configuration issue.
 
+## Live captions panel
+
+Open **Live captions** in the main workspace. The panel shows the latest original speech in large text, with its timestamp and detected language. Use **Translate to** to choose **Off · original speech**, **Arabic**, or **English**. This selector remains available during capture; a changed language applies to the next speech segment. Starting capture automatically opens this panel.
+
+Speech arrives in approximately ten-second chunks through local Whisper. Translation uses local Ollama and may arrive later, depending on your hardware. Late translations from a previous language or caption are ignored by the live panel. A translation error appears in the panel while recording and original captions continue. Final summaries still require a working Ollama service. Full transcript and translation history remain in their separate tabs, and saved translations include timestamps and the selected language.
+
 ## Join as a separate participant
 
 Paste a Teams, Google Meet or Zoom HTTPS invitation, choose a visible name and click **Join as guest**. A separate Microsoft Edge window opens in a fresh browser context. Coord attempts common English guest-name/join controls and never bypasses a host lobby, authentication, CAPTCHA or organizational guest policy. Complete provider-specific steps in that window when needed. The participant is listen-only: microphone and camera permissions are denied. You hear its audio through this PC, and the Windows capture path transcribes it.

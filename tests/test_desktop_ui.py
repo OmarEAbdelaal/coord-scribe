@@ -16,7 +16,7 @@ def test_window_state_and_transcript_rendering(settings, engine):
     app.processEvents()
     assert not window.stop.isEnabled()
     assert not window.send.isEnabled()
-    window.on_event('transcript', {'start': 12, 'language': 'ar', 'text': 'مرحبا <script>unsafe</script>'})
+    window.on_event('transcript', {'start': 12, 'end': 15, 'language': 'ar', 'text': 'مرحبا <script>unsafe</script>'})
     assert 'مرحبا <script>unsafe</script>' in window.transcript.toPlainText()
     window.set_busy(True)
     assert not window.import_button.isEnabled()
@@ -110,3 +110,38 @@ def test_open_settings_updates_when_system_theme_changes(settings):
     window.close()
     manager.refresh(Qt.ColorScheme.Light)
     manager.deleteLater()
+
+
+def test_live_caption_language_can_change_during_capture(settings):
+    from unittest.mock import Mock
+    from coordy.desktop.settings import DesktopSettings
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    window.show()
+    window.session = Mock()
+    window.set_busy(True)
+    assert window.captions.target.isEnabled()
+    window.captions.target.setCurrentIndex(window.captions.target.findData('Arabic'))
+    assert DesktopSettings.load(settings.paths.root).translation == 'Arabic'
+    window.session.set_translation.assert_called_once_with('Arabic')
+    source = {'start': 12, 'end': 15, 'language': 'en', 'text': 'P01 approved <design>.'}
+    window.on_event('transcript', source)
+    assert window.captions.original.toPlainText() == source['text']
+    window.on_event('translation', {**source, 'language': 'Arabic', 'text': 'وافق P01 على التصميم.'})
+    assert 'وافق P01' in window.captions.translated.toPlainText()
+    app.processEvents()
+    assert window.captions.translated.document().size().height() <= window.captions.translated.viewport().height()
+    window.captions.target.setCurrentIndex(window.captions.target.findData('English'))
+    window.on_event('translation', {**source, 'language': 'Arabic', 'text': 'Old reply'})
+    assert not window.captions.translated.toPlainText()
+    window.on_event('transcript', {**source, 'start': 20, 'end': 25})
+    window.on_event('translation', {**source, 'language': 'English', 'text': 'Earlier segment'})
+    assert not window.captions.translated.toPlainText()
+    window.on_event('caption_translation_error', {'start': 20, 'end': 25, 'language': 'English'})
+    assert 'recording and original captions continue' in window.captions.translated.toPlainText()
+    window.captions.target.setCurrentIndex(0)
+    assert window.captions.translated.isHidden()
+    assert window.captions.original.toPlainText() == source['text']
+    window.session = None
+    window.set_busy(False)
+    window.close()

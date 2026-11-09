@@ -39,3 +39,6 @@ QSpinBox::down-arrow { image: url("$down"); width: 12px; height: 12px; }
 QCheckBox::indicator { width: 16px; height: 16px; border: 1px solid $strong; border-radius: 3px; background: $surface; }
 QCheckBox::indicator:hover { border-color: $link; }
 QCheckBox::indicator:checked { background: $accent; border-color: $accent; image: url("$check"); }
+
+QLabel#captionHeading { font-size: 15pt; font-weight: 600; }
+QTextBrowser#captionText { font-size: 18pt; padding: 8px; }

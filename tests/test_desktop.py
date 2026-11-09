@@ -197,3 +197,46 @@ def test_setup_models_failure_exits_nonzero(monkeypatch):
     from coordy.desktop import models
     monkeypatch.setattr(models, 'install_models', Mock(side_effect=RuntimeError('Download unavailable')))
     assert main(['setup-models']) == 1
+
+
+@pytest.mark.parametrize('translation_fails', [False, True])
+def test_live_caption_translation_switching_and_failure_isolation(settings, engine, fake_ollama, translation_fails):
+    from tests.conftest import MINUTES
+    events = []
+    class Capture:
+        def stop(self):
+            pass
+        def record(self, path, on_chunk, on_ready):
+            write_wav(path)
+            on_ready()
+            on_chunk(np.zeros(16000, np.float32), 0)
+            on_chunk(np.zeros(16000, np.float32), 1)
+    class Speech:
+        def transcribe(self, audio):
+            return [Segment(0, .5, 'Omar Elsayed agreed', language='en')]
+    def reply(body):
+        if body['messages'][0]['content'].startswith('Translate'):
+            return {} if translation_fails else {'text': 'Omar Elsayed وافق'}
+        return MINUTES
+    fake_ollama.reply = reply
+    session = None
+    def emit(kind, value):
+        events.append((kind, value))
+        if kind in {'translation', 'caption_translation_error'}:
+            session.set_translation('Arabic')
+    session = CaptureSession(settings, DesktopSettings(translation='English'), emit,
+                             capture=Capture(), transcriber=Speech(), engine=engine)
+    mid = session.run()
+    assert engine.store.meeting(mid)['status'] == 'done'
+    assert len([item for kind, item in events if kind == 'transcript']) == 2
+    outcome = 'caption_translation_error' if translation_fails else 'translation'
+    captions = [item for kind, item in events if kind == outcome]
+    assert [item['language'] for item in captions] == ['English', 'Arabic']
+    assert [item['start'] for item in captions] == [0, 1]
+    if not translation_fails:
+        saved = json.loads((settings.paths.redacted / f'{mid}.translation.json').read_text(encoding='utf-8'))
+        assert saved == captions
+        assert all('Omar' not in item['text'] and 'P01' in item['text'] for item in captions)
+    else:
+        assert session.failure is None
+        assert not session.translations
