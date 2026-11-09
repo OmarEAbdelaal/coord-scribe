@@ -1,6 +1,8 @@
 """WASAPI speaker loopback + optional microphone, written incrementally to WAV."""
 from contextlib import ExitStack
 import math
+import logging
+import time
 from pathlib import Path
 import sys
 import threading
@@ -10,6 +12,7 @@ import numpy as np
 
 RATE = 16000
 WASAPI = 13
+log = logging.getLogger(__name__)
 
 
 def mono_pcm(data: bytes, channels: int, source_rate: int) -> np.ndarray:
@@ -80,6 +83,7 @@ class WindowsCapture:
         self.on_levels = on_levels
         self.on_devices = on_devices
         self.stop_event = threading.Event()
+        self._clock = time.monotonic
 
     def stop(self):
         self.stop_event.set()
@@ -91,6 +95,7 @@ class WindowsCapture:
         self._record(path, on_chunk, on_ready, pa)
 
     def _record(self, path, on_chunk, on_ready, pa):
+        from scipy.signal import resample_poly  # Load before starting device buffers.
         with ExitStack() as stack:
             audio = pa.PyAudio()
             stack.callback(audio.terminate)
@@ -104,12 +109,14 @@ class WindowsCapture:
                 # Open the endpoint's native channel count, including surround outputs.
                 channels = int(device["maxInputChannels"])
                 stream = audio.open(format=pa.paInt16, channels=channels, rate=rate, input=True,
-                                    input_device_index=int(device["index"]), frames_per_buffer=rate // 10)
+                                    input_device_index=int(device["index"]), frames_per_buffer=rate // 10, start=False)
                 stack.callback(stream.close)
-                streams.append((stream, channels, rate))
+                streams.append((stream, channels, rate, device["name"]))
+            for stream, _, _, _ in streams:
+                stream.start_stream()
             self.on_devices({"computer": speaker["name"],
                              "microphone": devices[1]["name"] if self.microphone else None})
-            with wave.open(str(path), "wb") as output:
+            with path.open("wb", buffering=0) as recording, wave.open(recording, "wb") as output:
                 output.setnchannels(1)
                 output.setsampwidth(2)
                 output.setframerate(RATE)
@@ -119,30 +126,59 @@ class WindowsCapture:
                 ticks = 0
                 silent_frames = 0
                 speaker_peak = mic_peak = 0.0
+                recorded_frames = 0
+                received = [0] * len(streams)
+                started = self._clock()
+                deadline = started
+                log.info("Capture started: computer=%s microphone=%s", speaker["name"], devices[1]["name"] if self.microphone else "off")
                 on_ready()
-                while not self.stop_event.is_set():
-                    blocks = [mono_pcm(stream.read(rate // 10, exception_on_overflow=True), channels, rate)
-                              for stream, channels, rate in streams]
-                    block = mix(blocks[0], blocks[1] if len(blocks) > 1 else None)
-                    # Measure the computer source before mixing so the mic cannot mask silence.
-                    peak = float(np.max(np.abs(blocks[0]))) if len(blocks[0]) else 0.0
-                    speaker_peak = max(speaker_peak, peak)
-                    silent_frames = silent_frames + len(blocks[0]) if peak < 0.001 else 0
-                    if self.microphone:
-                        mic_peak = max(mic_peak, float(np.max(np.abs(blocks[1]))))
-                    ticks += 1
-                    if ticks % 5 == 0:
-                        self.on_levels({"computer": meter_level(speaker_peak),
-                                        "microphone": meter_level(mic_peak) if self.microphone else None,
-                                        "computer_silent_seconds": silent_frames / RATE})
-                        speaker_peak = mic_peak = 0.0
-                    output.writeframes((np.clip(block, -1, 1) * 32767).astype('<i2').tobytes())
-                    pending.append(block)
-                    count += len(block)
-                    if count >= RATE * 10:
-                        chunk = np.concatenate(pending)
-                        on_chunk(chunk, offset)
-                        offset += len(chunk) / RATE
-                        pending, count = [], 0
+                try:
+                    while not self.stop_event.is_set():
+                        deadline += 0.1
+                        if self.stop_event.wait(max(0, deadline - self._clock())):
+                            break
+                        # Never wait on a dormant loopback or microphone. Read only
+                        # available frames; silence from one source cannot block the other.
+                        blocks = []
+                        for index, (stream, channels, rate, name) in enumerate(streams):
+                            if not stream.is_active():
+                                raise RuntimeError(f"Audio device stopped: {name}. Re-select it in Settings.")
+                            available = stream.get_read_available()
+                            if available > rate * 2:
+                                raise RuntimeError(f"Audio buffer fell more than two seconds behind: {name}. Recording retained; reduce CPU load and retry.")
+                            frames = min(rate // 10, max(0, available))
+                            block = np.zeros(RATE // 10, dtype=np.float32)
+                            if frames:
+                                decoded = mono_pcm(stream.read(frames, exception_on_overflow=True), channels, rate)
+                                length = min(len(block), len(decoded))
+                                block[:length] = decoded[:length]
+                                received[index] += frames
+                            blocks.append(block)
+                        block = mix(blocks[0], blocks[1] if len(blocks) > 1 else None)
+                        output.writeframes((np.clip(block, -1, 1) * 32767).astype('<i2').tobytes())
+                        recorded_frames += len(block)
+                        # Measure the computer source before mixing so the mic cannot mask silence.
+                        peak = float(np.max(np.abs(blocks[0]))) if len(blocks[0]) else 0.0
+                        speaker_peak = max(speaker_peak, peak)
+                        silent_frames = silent_frames + len(blocks[0]) if peak < 0.001 else 0
+                        if self.microphone:
+                            mic_peak = max(mic_peak, float(np.max(np.abs(blocks[1]))))
+                        ticks += 1
+                        if ticks % 5 == 0:
+                            self.on_levels({"computer": meter_level(speaker_peak),
+                                            "microphone": meter_level(mic_peak) if self.microphone else None,
+                                            "computer_silent_seconds": silent_frames / RATE,
+                                            "recorded_seconds": recorded_frames / RATE})
+                            speaker_peak = mic_peak = 0.0
+                        pending.append(block)
+                        count += len(block)
+                        if count >= RATE * 10:
+                            chunk = np.concatenate(pending)
+                            on_chunk(chunk, offset)
+                            offset += len(chunk) / RATE
+                            pending, count = [], 0
+                finally:
+                    log.info("Capture finished: saved=%.2fs elapsed=%.2fs source_frames=%s stop_requested=%s",
+                             recorded_frames / RATE, self._clock() - started, received, self.stop_event.is_set())
                 if count:
                     on_chunk(np.concatenate(pending), offset)

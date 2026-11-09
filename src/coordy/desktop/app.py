@@ -349,6 +349,8 @@ class Window(QMainWindow):
             self.mic_level.setToolTip("Microphone: " + (value["microphone"] or "Off"))
             self.mic_level.setEnabled(value["microphone"] is not None)
         elif kind == "audio_levels":
+            if "recorded_seconds" in value and self.session and self.stop.isEnabled():
+                self.badge.setText(f"Recording · {value['recorded_seconds']:.1f}s of audio saved")
             self.computer_level.setValue(value["computer"])
             self.mic_level.setValue(value["microphone"] or 0)
             silent = value["computer_silent_seconds"] >= 10
@@ -402,9 +404,9 @@ class Window(QMainWindow):
         self.update_controls()
         worker.start()
 
-    def stop_capture(self):
+    def stop_capture(self, checked=False, *, reason="user request"):
         if self.session:
-            self.session.stop()
+            self.session.stop(reason)
             self.stop.setEnabled(False)
             self.badge.setText("STOPPING  /  Finishing transcript and minutes")
 
@@ -522,7 +524,7 @@ class Window(QMainWindow):
         if change == "start" and not self.busy:
             self.start_capture()
         elif change == "stop" and self.session:
-            self.stop_capture()
+            self.stop_capture(reason="meeting detection inactivity")
 
     def download_models(self):
         self.settings = load_settings()
@@ -618,6 +620,8 @@ def main():
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s", handlers=handlers)
     logging.getLogger("coordy.transcribe").setLevel(logging.INFO)
+    logging.getLogger("coordy.desktop.capture").setLevel(logging.INFO)
+    logging.getLogger("coordy.desktop.session").setLevel(logging.INFO)
     window.show()
     if "--smoke-test" in sys.argv:
         # Used by Windows packaging CI: construct the actual frozen interface, then exit.

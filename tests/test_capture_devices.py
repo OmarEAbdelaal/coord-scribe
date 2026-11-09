@@ -22,6 +22,7 @@ class Audio:
         self.opened = []
         self.streams = []
         self.terminated = False
+        self.stalled = set()
 
     def get_loopback_device_info_generator(self):
         return iter(self.devices[:2])
@@ -43,11 +44,15 @@ class Audio:
         stream = SimpleNamespace(closed=False)
         def read(frames, **options):
             nonlocal position
+            assert index not in self.stalled, "Must not read a source with no available frames"
             phase = np.arange(position, position + frames) / kwargs['rate']
             signal = np.sin(2 * np.pi * frequency * phase) * amplitude
             position += frames
             return np.repeat((signal * 32767).astype('<i2')[:, None], kwargs['channels'], axis=1).tobytes()
         stream.read = read
+        stream.is_active = lambda: True
+        stream.start_stream = lambda: None
+        stream.get_read_available = lambda: 0 if index in self.stalled else kwargs["rate"] // 10
         stream.close = lambda: setattr(stream, 'closed', True)
         self.streams.append(stream)
         return stream
@@ -56,15 +61,24 @@ class Audio:
         self.terminated = True
 
 
-def run_capture(tmp_path, speaker, microphone, ticks=1):
+def run_capture(tmp_path, speaker, microphone, ticks=1, stalled=()):
     audio = Audio()
+    audio.stalled = set(stalled)
     levels, devices, chunks = [], [], []
     capture = None
     def on_levels(value):
         levels.append(value)
+        with wave.open(str(output), 'rb') as live_file:
+            assert live_file.getnframes() / live_file.getframerate() == value['recorded_seconds']
         if len(levels) >= ticks:
             capture.stop()
     capture = WindowsCapture(microphone, speaker, MIC, on_levels=on_levels, on_devices=devices.append)
+    clock = [0.0]
+    capture._clock = lambda: clock[0]
+    def wait(seconds):
+        clock[0] += seconds
+        return capture.stop_event.is_set()
+    capture.stop_event.wait = wait
     output = tmp_path / 'recording.wav'
     capture._record(output, lambda samples, offset: chunks.append((samples, offset)), lambda: None,
                     SimpleNamespace(PyAudio=lambda: audio, paInt16=8))
@@ -114,3 +128,21 @@ def test_default_computer_source_cannot_be_a_microphone():
     audio.get_default_wasapi_loopback = lambda: audio.devices[2]
     with pytest.raises(RuntimeError, match='not a microphone'):
         select_device(audio, '', 'speakers')
+
+
+@pytest.mark.parametrize('stalled, frequency', [([2], 880), ([3], 440)])
+def test_stalled_source_does_not_block_other_audio_or_shorten_file(tmp_path, stalled, frequency):
+    audio, levels, _, samples = run_capture(tmp_path, HEADSET, True, ticks=20, stalled=stalled)
+    assert len(samples) == 10 * 16000
+    assert levels[-1]['recorded_seconds'] == 10
+    frequencies = np.fft.rfftfreq(len(samples), 1 / 16000)
+    spectrum = np.abs(np.fft.rfft(samples))
+    assert spectrum[np.argmin(abs(frequencies - frequency))] > 1_000_000
+    assert levels[-1]['computer' if 2 in stalled else 'microphone'] == 0
+
+
+def test_both_sources_dormant_still_produce_timed_wav_and_stop(tmp_path):
+    _, levels, _, samples = run_capture(tmp_path, HEADSET, True, ticks=2, stalled=[2, 3])
+    assert len(samples) == 16000
+    assert not np.count_nonzero(samples)
+    assert levels[-1]['recorded_seconds'] == 1

@@ -240,3 +240,18 @@ def test_live_caption_translation_switching_and_failure_isolation(settings, engi
     else:
         assert session.failure is None
         assert not session.translations
+
+
+def test_short_capture_reports_duration_without_loading_whisper(settings, engine):
+    class Capture:
+        def stop(self):
+            pass
+        def record(self, path, on_chunk, on_ready):
+            write_wav(path, seconds=.1)
+            on_chunk(np.zeros(1600, np.float32), 0)
+    speech = Mock()
+    session = CaptureSession(settings, DesktopSettings(), lambda *args: None,
+                             capture=Capture(), transcriber=speech, engine=engine)
+    with pytest.raises(RuntimeError, match='only 0.10 seconds'):
+        session.run()
+    speech.transcribe.assert_not_called()

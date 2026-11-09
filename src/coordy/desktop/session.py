@@ -1,6 +1,8 @@
 """Bounded live transcription, followed by the existing minutes pipeline."""
 import json
 import queue
+import wave
+import logging
 import threading
 from datetime import datetime
 import uuid
@@ -8,6 +10,8 @@ import uuid
 from ..pipeline import Engine
 from ..transcribe import Transcriber
 from .capture import WindowsCapture
+
+log = logging.getLogger(__name__)
 
 
 class CaptureSession:
@@ -36,7 +40,8 @@ class CaptureSession:
         with self._translation_lock:
             self._translation = language
 
-    def stop(self):
+    def stop(self, reason="user request"):
+        log.info("Capture stop requested: %s", reason)
         self.capture.stop()
 
     def _consume(self):
@@ -48,6 +53,9 @@ class CaptureSession:
                 if self.failure:
                     continue
                 audio, offset = item
+                if len(audio) < 8000:
+                    self.emit("speech_state", {"message": "Audio fragment too short for captions", "busy": False})
+                    continue
                 self.emit("speech_state", {"message": f"Transcribing captured audio at {offset:.0f}s", "busy": True})
                 segments = self.transcriber.transcribe(audio)
                 self.emit("speech_state", {"message": "Speech recognized" if segments else
@@ -102,6 +110,10 @@ class CaptureSession:
             self.emit("status", "Finishing transcript…")
             self.chunks.put(None)
             consumer.join()
+        with wave.open(str(path), "rb") as recorded:
+            duration = recorded.getnframes() / recorded.getframerate()
+        if duration < 1:
+            raise RuntimeError(f"Capture saved only {duration:.2f} seconds. Recording stopped too early; check audio devices and logs/desktop.log. File retained: {path}")
         if self.failure:
             raise RuntimeError(f"Live processing failed; recording retained at {path}. {self.failure}")
         self.emit("speech_state", {"message": "Transcription complete; generating minutes", "busy": False})
