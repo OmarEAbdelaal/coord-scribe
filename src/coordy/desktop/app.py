@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import html
 import json
+import logging
+import time
 import os
 from pathlib import Path
 import sys
@@ -292,9 +294,12 @@ class Window(QMainWindow):
         self.computer_level.setToolTip("Computer sound from the selected speaker/headset loopback")
         self.mic_level.setToolTip("Optional microphone source")
         self.audio_silent = False
+        self.speech_state = {"message": "", "busy": False}
+        self.speech_started = 0.0
         self.statusBar().showMessage("Ready. Match the meeting output device in Settings.")
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.poll_detection)
+        self.timer.timeout.connect(self.update_speech_progress)
         self.timer.start(3000)
         self.refresh_history()
         self.update_controls()
@@ -326,8 +331,20 @@ class Window(QMainWindow):
         self.busy = value
         self.update_controls()
 
+    def update_speech_progress(self):
+        if self.speech_state["message"]:
+            message = self.speech_state["message"]
+            if self.speech_state["busy"]:
+                elapsed = int(time.monotonic() - self.speech_started)
+                message += f" · {elapsed}s elapsed"
+            self.captions.notice.setText(message)
+
     def on_event(self, kind, value):
-        if kind == "audio_devices":
+        if kind == "speech_state":
+            self.speech_state = value
+            self.speech_started = time.monotonic()
+            self.update_speech_progress()
+        elif kind == "audio_devices":
             self.computer_level.setToolTip("Computer sound: " + value["computer"])
             self.mic_level.setToolTip("Microphone: " + (value["microphone"] or "Off"))
             self.mic_level.setEnabled(value["microphone"] is not None)
@@ -365,6 +382,8 @@ class Window(QMainWindow):
         self.computer_level.setValue(0)
         self.mic_level.setValue(0)
         self.audio_silent = False
+        self.speech_state = {"message": "Recording audio; first chunk is sent to Whisper after about 10 seconds", "busy": False}
+        self.update_speech_progress()
         self.captions.reset()
         self.tabs.setCurrentWidget(self.captions)
         self.transcript.clear()
@@ -394,6 +413,8 @@ class Window(QMainWindow):
         self.mic_level.setValue(0)
         self.session = None
         self.set_busy(False)
+        self.speech_state = {"message": "Processing failed. Check the error message or logs/desktop.log.", "busy": False}
+        self.update_speech_progress()
         self.badge.setText("ATTENTION  /  Processing failed; audio retained locally")
         self.refresh_history()
         self.show_error(message)
@@ -440,7 +461,11 @@ class Window(QMainWindow):
         if not meeting:
             return
         path = self.settings.paths.minutes / f"{mid}.md"
-        self.minutes.setMarkdown(engine.redactor().redact(path.read_text(encoding="utf-8")) if path.exists() else "Minutes are unavailable. Check local models, then retry processing from the CLI.")
+        if path.exists():
+            self.minutes.setMarkdown(engine.redactor().redact(path.read_text(encoding="utf-8")))
+        else:
+            error = meeting.get("error") or "No minutes generated yet."
+            self.minutes.setPlainText("Meeting status: " + meeting["status"] + "\n\n" + engine.redactor().redact(error))
         transcript = self.settings.paths.redacted / f"{mid}.md"
         if transcript.exists():
             self.transcript.setMarkdown(engine.redactor().redact(transcript.read_text(encoding="utf-8")))
@@ -588,6 +613,11 @@ def main():
         QFontDatabase.addApplicationFont(str(font))
     theme = ThemeManager(app)
     window = Window()
+    handlers = [logging.FileHandler(window.settings.paths.logs / "desktop.log", encoding="utf-8")]
+    if sys.stderr is not None:
+        handlers.append(logging.StreamHandler())
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s", handlers=handlers)
+    logging.getLogger("coordy.transcribe").setLevel(logging.INFO)
     window.show()
     if "--smoke-test" in sys.argv:
         # Used by Windows packaging CI: construct the actual frozen interface, then exit.

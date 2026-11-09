@@ -55,6 +55,8 @@ To diagnose a mic-only recording: play meeting audio, stop capture, choose that 
 
 Capture uses WASAPI loopback and includes **all audio** on that speaker device, not just a particular meeting. Keep unrelated applications quiet and use headphones to reduce duplicate mic pickup. The microphone and speaker streams are mixed; this does not provide per-participant tracks. Hardware clock drift and echo need real-device testing. Recordings are retained on processing errors and can be imported again after correcting the model/configuration issue.
 
+If the **Computer sound** meter moves but captions stay empty, audio is reaching capture; inspect the caption processing message for Whisper loading, CPU fallback, transcription, or Ollama translation. Processing time depends on hardware and may exceed the ten-second capture window. The desktop records model-loading/fallback diagnostics in `~/Coordy/logs/desktop.log`. Select a failed meeting and open **Minutes and actions** to see its stored error. A quiet Mic meter must be checked separately against the selected input, hardware mute and Windows desktop-app microphone permissions.
+
 ## Live captions panel
 
 Open **Live captions** in the main workspace. The panel shows the latest original speech in large text, with its timestamp and detected language. Use **Translate to** to choose **Off · original speech**, **Arabic**, or **English**. This selector remains available during capture; a changed language applies to the next speech segment. Starting capture automatically opens this panel.

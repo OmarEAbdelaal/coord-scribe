@@ -19,7 +19,8 @@ class CaptureSession:
             preferences.microphone, preferences.speaker_device, preferences.microphone_device,
             on_levels=lambda levels: self.emit("audio_levels", levels),
             on_devices=lambda devices: self.emit("audio_devices", devices))
-        self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary())
+        self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary(),
+            status=lambda message: self.emit("speech_state", {"message": message, "busy": True}))
         self.engine = engine or Engine(settings, transcriber=self.transcriber)
         self._translation = preferences.translation
         self._translation_lock = threading.Lock()
@@ -47,7 +48,11 @@ class CaptureSession:
                 if self.failure:
                     continue
                 audio, offset = item
-                for segment in self.transcriber.transcribe(audio):
+                self.emit("speech_state", {"message": f"Transcribing captured audio at {offset:.0f}s", "busy": True})
+                segments = self.transcriber.transcribe(audio)
+                self.emit("speech_state", {"message": "Speech recognized" if segments else
+                    "Audio processed, but no speech recognized in this chunk. Check the source levels and recording.", "busy": False})
+                for segment in segments:
                     segment.start += offset
                     segment.end += offset
                     self.segments.append(segment)
@@ -58,6 +63,7 @@ class CaptureSession:
                     if target in {"Arabic", "English"}:
                         caption = {"start": segment.start, "end": segment.end, "language": target}
                         try:
+                            self.emit("speech_state", {"message": "Translating captions with local Ollama", "busy": True})
                             translated = self.engine.llm.chat_json(
                                 f"Translate the text into {target}. Preserve codes such as P01. Return JSON with text.",
                                 text, {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
@@ -70,6 +76,8 @@ class CaptureSession:
                         except Exception:
                             # Optional translation must not stop capture or discard speech.
                             self.emit("caption_translation_error", caption)
+                        finally:
+                            self.emit("speech_state", {"message": "Waiting for the next audio chunk", "busy": False})
 
             except Exception as exc:
                 self.failure = exc
@@ -96,6 +104,7 @@ class CaptureSession:
             consumer.join()
         if self.failure:
             raise RuntimeError(f"Live processing failed; recording retained at {path}. {self.failure}")
+        self.emit("speech_state", {"message": "Transcription complete; generating minutes", "busy": False})
         self.emit("status", "Generating local minutes…")
         segments = None if self.incomplete else self.segments
         mid = self.engine.process(path, title=title, segments=segments,

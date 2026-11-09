@@ -11,6 +11,7 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 _done = False
+_dll_handles = []  # Keep directory registrations alive for lazy CUDA DLL loading.
 
 
 def _torch_lib() -> tuple[Path, str] | None:
@@ -48,7 +49,7 @@ def prepare_cuda() -> list[Path]:
     _done = True
     dirs = cuda_dll_dirs()
     for d in dirs:
-        os.add_dll_directory(str(d))
+        _dll_handles.append(os.add_dll_directory(str(d)))
     if dirs:
         # CTranslate2 loads cuDNN lazily with LoadLibrary, which searches PATH.
         os.environ["PATH"] = os.pathsep.join([*map(str, dirs), os.environ.get("PATH", "")])

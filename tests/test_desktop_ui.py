@@ -173,3 +173,17 @@ def test_audio_device_selection_persists_and_source_meters_are_independent(setti
     assert window.computer_level.value() == 60
     assert window.statusBar().currentMessage() == 'Computer sound received.'
     window.close()
+
+
+def test_caption_processing_status_and_saved_meeting_error_are_visible(settings, engine):
+    app = QApplication.instance() or QApplication([])
+    window = Window()
+    window.on_event('speech_state', {'message': 'Loading Whisper on CPU', 'busy': True})
+    assert 'Loading Whisper on CPU' in window.captions.notice.text()
+    assert 'elapsed' in window.captions.notice.text()
+    window.on_event('speech_state', {'message': 'No speech recognized', 'busy': False})
+    assert window.captions.notice.text() == 'No speech recognized'
+    engine.store.upsert_meeting('failed-meeting', status='error', error='CUDA unavailable <details>')
+    window.load_meeting('failed-meeting')
+    assert 'CUDA unavailable <details>' in window.minutes.toPlainText()
+    window.close()

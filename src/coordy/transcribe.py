@@ -34,8 +34,9 @@ def load_audio(path: str):
 
 
 class Transcriber:
-    def __init__(self, settings: WhisperSettings, glossary: str = ""):
+    def __init__(self, settings: WhisperSettings, glossary: str = "", status=None):
         self.settings = settings
+        self.status = status or (lambda message: None)
         self.glossary = glossary
         self._model = None
         self._device = ""
@@ -58,9 +59,11 @@ class Transcriber:
         from faster_whisper import WhisperModel
 
         prepare_cuda()
+        self.status(f"Loading Whisper {self.settings.model} on {device.upper()} ({compute})…")
         log.info("Loading Whisper %s on %s (%s)", self.settings.model, device, compute)
         self._model = WhisperModel(self.settings.model, device=device, compute_type=compute)
         self._device = device
+        self.status(f"Transcribing with Whisper on {device.upper()}" + (" — CPU processing may be slow" if device == "cpu" else ""))
 
     def model(self):
         if self._model is None:
@@ -71,6 +74,7 @@ class Transcriber:
                 if device != "cuda" or self.settings.device == "cuda":
                     raise
                 log.warning("Could not load Whisper on GPU (%s); using CPU", exc)
+                self.status("GPU unavailable; switching Whisper to CPU. Check CUDA libraries for faster captions.")
                 self._load("cpu", "int8")
         return self._model
 
@@ -110,5 +114,6 @@ class Transcriber:
                     raise
                 # Typical: cublas64_12.dll / cudnn missing or unsupported GPU.
                 log.warning("GPU transcription failed (%s); retrying on CPU", exc)
+                self.status("GPU unavailable; switching Whisper to CPU. Check CUDA libraries for faster captions.")
                 self._load("cpu", "int8")
                 return self._run(audio, progress)
