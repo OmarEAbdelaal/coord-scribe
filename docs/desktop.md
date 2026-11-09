@@ -28,6 +28,10 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Desktop
 
 Accept the [pyannote model terms](https://huggingface.co/pyannote/speaker-diarization-community-1) and securely configure `HF_TOKEN`, then rerun `coordy setup-models`. The packaged application omits optional PyTorch/pyannote and CUDA DLLs to keep its distribution manageable. It supports CPU inference; the source installation is recommended for NVIDIA and speaker labeling. CPU large-v3 can be substantially slower than real time. The live queue is bounded; if it falls behind, the complete recording is transcribed again after Stop, rather than silently omitting speech.
 
+## Appearance
+
+The interface follows the Windows light/dark appearance and updates when the system theme changes. Settings, confirmation dialogs, dropdowns and disabled controls share the same APG palette. The original APG logo is displayed with its aspect ratio preserved.
+
 ## Models and settings
 
 The first launch creates `~/Coordy` (override with `COORDY_HOME`). Edit `config.toml` for Whisper model/device, language, glossary and Ollama model. Arabic/English code switching uses faster-whisper's multilingual mode. Inference uses existing pretrained models; training is not required. Real-time translation is text-only via the local LLM, selected as Arabic or English in desktop settings. It does not speak into the meeting. Translations are saved beside the redacted transcript.

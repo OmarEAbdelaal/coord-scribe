@@ -9,7 +9,7 @@ import sys
 import threading
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon
+from PySide6.QtGui import QDesktopServices, QFontDatabase, QIcon, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem,
@@ -24,6 +24,7 @@ from .guest import join_guest, provider_for
 from .models import install_models
 from .session import CaptureSession
 from .settings import DesktopSettings
+from .theme import ThemeManager
 
 ASSETS = Path(__file__).parent / "assets"
 
@@ -126,7 +127,14 @@ class Window(QMainWindow):
         sidebar.setFixedWidth(270)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(20, 28, 20, 20)
-        brand = QLabel("APG  /  Coord")
+        self.logo = QLabel()
+        self.logo.setObjectName("logo")
+        self.logo.setAccessibleName("APG logo")
+        original = QPixmap(str(ASSETS / "apg-logo.png"))
+        self.logo.setPixmap(original.scaledToWidth(150, Qt.TransformationMode.SmoothTransformation))
+        self.logo.setFixedSize(self.logo.sizeHint())
+        side.addWidget(self.logo)
+        brand = QLabel("Coord")
         brand.setObjectName("brand")
         side.addWidget(brand)
         subtitle = QLabel("Meeting intelligence\nLocal models · Arabic / English")
@@ -245,7 +253,7 @@ class Window(QMainWindow):
             self.statusBar().showMessage(str(value))
         elif kind == "transcript":
             stamp = f"{value['start'] // 60:02.0f}:{value['start'] % 60:02.0f}"
-            self.transcript.append(f'<p><span style="color:#646B7A;font-family:monospace">{stamp} · {html.escape(value["language"])}</span><br><span dir="auto">{html.escape(value["text"])}</span></p>')
+            self.transcript.append(f'<p><span style="font-family:monospace">{stamp} · {html.escape(value["language"])}</span><br><span dir="auto">{html.escape(value["text"])}</span></p>')
         elif kind == "translation":
             self.translation.append(f'<p dir="auto">{html.escape(str(value))}</p>')
         elif kind in {"guest", "guest_joined"}:
@@ -465,7 +473,7 @@ def main():
     app = QApplication.instance() or QApplication(sys.argv)
     for font in ASSETS.glob("*.ttf"):
         QFontDatabase.addApplicationFont(str(font))
-    app.setStyleSheet((ASSETS / "apg.qss").read_text(encoding="utf-8"))
+    theme = ThemeManager(app)
     window = Window()
     window.show()
     if "--smoke-test" in sys.argv:
