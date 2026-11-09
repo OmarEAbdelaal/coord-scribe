@@ -1,0 +1,14 @@
+{
+  "color": {
+    "primary": "#1F2DA8",
+    "primaryDark": "#172284",
+    "tint": "#EEF0FB",
+    "tintBorder": "#DDE1F7",
+    "buttonBorder": "#B9C0E8",
+    "pageBackground": "#F6F7F9"
+  },
+  "typography": {
+    "fontSans": "IBM Plex Sans",
+    "fontMono": "IBM Plex Mono"
+  }
+}

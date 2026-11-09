@@ -53,49 +53,12 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_setup_models(args) -> int:
-    settings = _settings()
-    if settings.privacy.offline:
-        print("privacy.offline is true - set it to false in config.toml to download models.")
-        return 1
-    from faster_whisper.utils import download_model
-
-    print(f"1/3 Whisper '{settings.whisper.model}' (about 3 GB the first time)...", flush=True)
-    print(f"    saved in {download_model(settings.whisper.model)}")
-
-    if settings.diarization.enabled:
-        print(f"2/3 Speaker model '{settings.diarization.model}'...", flush=True)
-        from .diarize import Diarizer
-
-        try:
-            Diarizer(settings.diarization, settings.hf_token).pipeline()
-            print("    ok")
-        except Exception as exc:  # noqa: BLE001
-            print(f"    FAILED: {exc}")
-            print("    Accept the terms at https://huggingface.co/" + settings.diarization.model)
-            print("    and put a read token in config.toml -> [diarization] hf_token")
-    else:
-        print("2/3 Speaker detection disabled - skipped")
-
-    from .llm import Ollama
-
-    print(f"3/3 Ollama model '{settings.llm.model}'...", flush=True)
+    from .desktop.models import install_models
     try:
-        llm = Ollama(settings.llm, settings.privacy)
-        if llm.has_model():
-            print("    already installed")
-        else:
-            seen = set()
-
-            def show(event: dict) -> None:
-                status = event.get("status", "")
-                if status not in seen:
-                    seen.add(status)
-                    print(f"    {status}", flush=True)
-
-            llm.pull(progress=show)
-    except Exception as exc:  # noqa: BLE001
-        print(f"    FAILED: {exc} - is Ollama installed and running?")
-    print("\nDone. Set privacy.offline = true in config.toml to block further downloads.")
+        install_models(_settings())
+    except Exception as exc:
+        print(f"Model setup failed: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

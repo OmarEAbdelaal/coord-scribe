@@ -36,10 +36,14 @@ class Ollama:
         self._client = httpx.Client(base_url=settings.host, timeout=settings.timeout_seconds, transport=transport)
 
     def version(self) -> str:
-        return self._client.get("/api/version", timeout=5).json().get("version", "")
+        response = self._client.get("/api/version", timeout=5)
+        response.raise_for_status()
+        return response.json().get("version", "")
 
     def models(self) -> list[str]:
-        return [m["name"] for m in self._client.get("/api/tags", timeout=10).json().get("models", [])]
+        response = self._client.get("/api/tags", timeout=10)
+        response.raise_for_status()
+        return [m["name"] for m in response.json().get("models", [])]
 
     def has_model(self, name: str | None = None) -> bool:
         name = name or self.settings.model
@@ -48,9 +52,14 @@ class Ollama:
 
     def pull(self, name: str | None = None, progress=None) -> None:
         with self._client.stream("POST", "/api/pull", json={"model": name or self.settings.model}, timeout=None) as r:
+            r.raise_for_status()
             for line in r.iter_lines():
-                if line and progress:
-                    progress(json.loads(line))
+                if line:
+                    event = json.loads(line)
+                    if event.get("error"):
+                        raise LLMError("Ollama model download failed: " + str(event["error"]))
+                    if progress:
+                        progress(event)
 
     def chat_json(self, system: str, user: str, schema: dict) -> dict:
         """Chat with structured output: the reply is forced to match `schema`."""

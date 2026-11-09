@@ -53,10 +53,9 @@ class Diarizer:
         return self._pipeline
 
     def diarize(self, audio) -> list[Turn]:
-        import torch
-
         with self._lock:
             pipeline = self.pipeline()
+            import torch
             kwargs = {}
             if self.settings.min_speakers:
                 kwargs["min_speakers"] = self.settings.min_speakers

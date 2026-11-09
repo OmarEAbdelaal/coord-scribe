@@ -1,0 +1,26 @@
+/* APG Brand Kit: blue accent, border-led surfaces, no shadows or gradients. */
+QWidget { font-family: "IBM Plex Sans", "Segoe UI"; font-size: 14px; color: #16181D; }
+QMainWindow { background: #F6F7F9; }
+QFrame#sidebar { background: #FFFFFF; border-right: 1px solid #E3E5EA; }
+QLabel#brand { color: #1F2DA8; font-size: 22px; font-weight: 600; }
+QLabel#heading { font-size: 24px; font-weight: 600; }
+QLabel#muted { color: #646B7A; }
+QLabel#metric { font-family: "IBM Plex Mono", "Consolas"; font-size: 13px; color: #1F2DA8; padding: 10px; background: #EEF0FB; border: 1px solid #DDE1F7; border-radius: 6px; }
+QPushButton { background: #FFFFFF; border: 1px solid #D6D9E0; border-radius: 6px; padding: 10px 16px; }
+QPushButton:hover { background: #EEF0FB; border-color: #B9C0E8; }
+QPushButton#primary { color: #FFFFFF; background: #1F2DA8; border-color: #1F2DA8; }
+QPushButton#primary:hover { background: #172284; }
+QPushButton#danger { color: #B3261E; background: #FCEBEA; border-color: #F3C9C5; }
+QPushButton:disabled { color: #9AA0AC; background: #F0F1F4; }
+QLineEdit, QComboBox, QSpinBox { background: #FFFFFF; border: 1px solid #D6D9E0; border-radius: 6px; padding: 8px; min-height: 22px; }
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 2px solid #1F2DA8; }
+QTextBrowser, QListWidget { background: #FFFFFF; border: 1px solid #E3E5EA; border-radius: 8px; padding: 12px; }
+QListWidget::item { padding: 12px; border-bottom: 1px solid #F0F1F4; }
+QListWidget::item:selected { background: #EEF0FB; color: #1F2DA8; }
+QTabWidget::pane { border: none; }
+QTabBar::tab { background: #F6F7F9; padding: 12px 18px; border-bottom: 2px solid #E3E5EA; }
+QTabBar::tab:selected { color: #1F2DA8; border-bottom: 2px solid #1F2DA8; }
+QCheckBox { spacing: 8px; padding: 6px 0; }
+QStatusBar { color: #646B7A; border-top: 1px solid #E3E5EA; background: #FFFFFF; }
+
+QPushButton#primary:disabled, QPushButton#danger:disabled { color: #9AA0AC; background: #F0F1F4; border-color: #E3E5EA; }

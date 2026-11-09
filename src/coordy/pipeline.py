@@ -72,7 +72,7 @@ class Engine:
         return mid
 
     # ------------------------------------------------------------------
-    def process(self, path: Path, title: str = "", project: str = "", day: str = "", stage=None) -> str:
+    def process(self, path: Path, title: str = "", project: str = "", day: str = "", stage=None, segments=None) -> str:
         stage = stage or (lambda name, frac=None: None)
         path = Path(path)
         if not path.is_file():
@@ -90,7 +90,10 @@ class Engine:
             duration = len(audio) / SAMPLE_RATE
 
             stage("transcribing", 0.0)
-            segments = self.transcriber.transcribe(audio, progress=lambda f: stage("transcribing", f))
+            if segments is None:
+                segments = self.transcriber.transcribe(audio, progress=lambda f: stage("transcribing", f))
+            if not segments:
+                raise ValueError("No speech detected. Recording retained; check the selected audio device.")
             languages = Counter(s.language for s in segments if s.language)
 
             if self.diarizer is not None:

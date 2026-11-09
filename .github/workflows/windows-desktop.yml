@@ -1,0 +1,32 @@
+name: Windows desktop installer
+on:
+  workflow_dispatch:
+  push:
+    branches: ['main', 'codex/windows-desktop-phase-one']
+    tags: ['desktop-v*']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Build and test desktop
+        shell: pwsh
+        run: ./scripts/build-desktop.ps1
+      - name: Smoke test frozen interface
+        shell: pwsh
+        run: |
+          $env:COORDY_HOME = Join-Path $env:RUNNER_TEMP 'coord-smoke'
+          $process = Start-Process dist/Coord/Coord.exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(60000)) { $process.Kill(); throw 'Desktop smoke test timed out' }
+          if ($process.ExitCode -ne 0) { throw 'Desktop smoke test failed' }
+      - name: Upload installer and portable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Coord-windows-x64
+          path: |
+            dist/installer/*.exe
+            dist/Coord/
+          if-no-files-found: error

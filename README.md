@@ -33,6 +33,20 @@ No subscriptions. Speech-to-text, speaker detection and minutes extraction all r
 - **Exports**: Markdown minutes per meeting, CSV register for Excel, and locally generated minutes with real names restored for distribution.
 - **13 MCP tools and 2 prompts** for Claude Desktop.
 
+## Windows desktop application (phase one)
+
+A native **APG-branded meeting workspace** is now included: Windows speaker/microphone capture, opt-in meeting/presentation detection, Arabic/English live transcripts, optional local text translation, local structured minutes, and configured Teams/email delivery. A visible browser guest can attempt Teams, Meet and Zoom web joining, subject to host admission and provider policies.
+
+```powershell
+uv venv --python 3.12
+uv pip install -e ".[desktop]"
+# Install/start Ollama separately, then download the models:
+.venv\Scripts\coordy setup-models
+.venv\Scripts\coordy-desktop.exe
+```
+
+See **[desktop setup, installer build and acceptance checks](docs/desktop.md)** and [architecture](docs/desktop-architecture.md). This is an initial implementation: cloud tests use fake audio/model backends; Windows hardware capture, live provider admission and recognition quality require the documented Windows checks. Weights download separately; no installer binary or model weights are checked into Git.
+
 ## Install (Windows 11 + NVIDIA)
 
 Full walkthrough: **[docs/setup-windows.md](docs/setup-windows.md)**.
@@ -104,7 +118,7 @@ Recommended models for an RTX 5080 (16 GB):
 ## Development
 
 ```bash
-uv venv --python 3.12 && uv pip install -e ".[dev]"
+uv venv --python 3.12 && uv pip install -e ".[dev,desktop]"
 uv run --no-sync pytest -q
 ```
 

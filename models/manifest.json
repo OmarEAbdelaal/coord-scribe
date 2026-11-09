@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "speech": {
+    "id": "large-v3",
+    "repository": "Systran/faster-whisper-large-v3",
+    "source": "https://huggingface.co/Systran/faster-whisper-large-v3",
+    "runtime": "faster-whisper / CTranslate2",
+    "languages": ["ar", "en"],
+    "approximate_download_gb": 3,
+    "revision_policy": "Upstream default revision through huggingface-hub with normal TLS and artifact validation. Downloaded snapshots retain their upstream commit in the local cache."
+  },
+  "minutes_and_translation": {
+    "id": "qwen3:14b",
+    "runtime": "Ollama on localhost:11434",
+    "approximate_download_gb": 9,
+    "alternatives": ["qwen3:8b", "gemma3:12b"]
+  },
+  "optional_speaker_detection": {
+    "id": "pyannote/speaker-diarization-community-1",
+    "requires": ["diarize extra", "accepted model terms", "HF_TOKEN for initial download"]
+  }
+}

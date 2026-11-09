@@ -7,6 +7,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -NoDiarize
 #>
 param(
+    [switch]$Desktop,           # native interface, meeting detection and Windows loopback
     [switch]$NoDiarize,          # skip speaker detection (no PyTorch, ~3 GB smaller)
     [string]$Python = "3.12"
 )
@@ -58,6 +59,7 @@ if (-not $NoDiarize) {
 
 Step "Installing Coord"
 $extras = @()
+if ($Desktop) { $extras += "desktop" }
 if (-not $NoDiarize) { $extras += "diarize" }
 if ($needGpuExtra) { $extras += "gpu" }
 $target = if ($extras.Count) { ".[" + ($extras -join ",") + "]" } else { "." }
@@ -76,3 +78,7 @@ Write-Host "     and put a read token in $env:USERPROFILE\Coordy\config.toml -> 
 Write-Host "  3. .venv\Scripts\coordy setup-models"
 Write-Host "  4. Edit $env:USERPROFILE\Coordy\aliases.toml (names to hide)"
 Write-Host "  5. .venv\Scripts\coordy claude-config --write   then fully restart Claude Desktop"
+
+if ($Desktop) {
+    Write-Host "Start the desktop app: .venv\Scripts\coordy-desktop.exe"
+}
