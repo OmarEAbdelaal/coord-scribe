@@ -10,6 +10,10 @@ language = ""              # "" = auto-detect, or force "ar" / "en"
 multilingual = true        # re-detect language per segment (Arabic/English code-switching)
 beam_size = 5
 vad = true                 # skip silence, reduces hallucinated text
+# Company GPU server instead of this PC (OpenAI-compatible API, e.g. Speaches):
+# server = "http://10.0.0.20:8000"   and optionally  server_model = "Systran/faster-whisper-large-v3"
+server = ""
+server_model = ""
 
 [diarization]
 enabled = true
@@ -19,8 +23,8 @@ min_speakers = 0           # 0 = let the model decide
 max_speakers = 0
 
 [llm]
-# Ollama running on THIS computer. Coord refuses non-local hosts unless
-# privacy.allow_remote_llm = true.
+# Ollama on THIS computer, or on a company server (see docs/server.md). Coord
+# refuses non-local hosts unless privacy.allow_remote_llm = true.
 host = "http://127.0.0.1:11434"
 model = "qwen3:14b"
 num_ctx = 32768            # context window; Ollama's default is too small for meetings

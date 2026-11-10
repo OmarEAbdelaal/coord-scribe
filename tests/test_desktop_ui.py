@@ -65,11 +65,15 @@ def test_settings_readable_and_operable_in_both_themes(settings, dark, tmp_path)
         assert control.font().pointSizeF() > 0
 
     combo = dialog.controls['translation']
+    dialog.select('translation')
+    app.processEvents()
     combo.showPopup()
     app.processEvents()
     popup_palette = combo.view().palette()
     assert contrast(popup_palette.color(QPalette.ColorRole.Text), popup_palette.color(QPalette.ColorRole.Base)) >= 4.5
     combo.hidePopup()
+    dialog.select('smtp_host')
+    app.processEvents()
     dialog.controls['smtp_host'].setFocus()
     QTest.keyClicks(dialog.controls['smtp_host'], 'smtp.example.com')
     checkbox = dialog.controls['auto_send']

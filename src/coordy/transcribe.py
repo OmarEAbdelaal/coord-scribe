@@ -117,3 +117,12 @@ class Transcriber:
                 self.status("GPU unavailable; switching Whisper to CPU. Check CUDA libraries for faster captions.")
                 self._load("cpu", "int8")
                 return self._run(audio, progress)
+
+
+def make_transcriber(settings, glossary: str = "", status=None, *, allow_remote: bool = False):
+    """Local faster-whisper, or the company speech server when whisper.server is set."""
+    if settings.server:
+        from .remote import RemoteTranscriber
+
+        return RemoteTranscriber(settings, glossary, status, allow_remote=allow_remote)
+    return Transcriber(settings, glossary, status)

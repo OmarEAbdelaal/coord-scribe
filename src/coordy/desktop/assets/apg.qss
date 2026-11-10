@@ -3,11 +3,11 @@ QWidget { font-family: "IBM Plex Sans", "Segoe UI"; font-size: 10.5pt; color: $t
 QMainWindow, QDialog, QMessageBox { background: $page; }
 QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
 QLabel#brand { color: $link; font-size: 16.5pt; font-weight: 600; }
-QLabel#logo { background: #FFFFFF; padding: 10px; border-radius: 6px; }
-QLabel#heading { font-size: 18pt; font-weight: 600; }
+QLabel#logo { background: #FFFFFF; padding: 6px; border-radius: 6px; }
+QLabel#heading { font-size: 17pt; font-weight: 600; }
 QLabel#muted { color: $muted; }
 QLabel#metric { font-family: "IBM Plex Mono", "Consolas"; font-size: 9.75pt; color: $link; padding: 10px; background: $tint; border: 1px solid $tint_border; border-radius: 6px; }
-QPushButton { background: $surface; border: 1px solid $strong; border-radius: 6px; padding: 10px 16px; }
+QPushButton { background: $surface; border: 1px solid $strong; border-radius: 6px; padding: 8px 14px; }
 QPushButton:hover { background: $tint; border-color: $tint_border; }
 QPushButton:focus { border: 2px solid $link; }
 QPushButton#primary { color: $accent_text; background: $accent; border-color: $accent; }
@@ -19,10 +19,13 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus { border: 2px solid $link; }
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled { color: $disabled; background: $sunken; }
 QComboBox QAbstractItemView { color: $text; background: $surface; border: 1px solid $strong; selection-background-color: $accent; selection-color: $accent_text; }
 QTextBrowser, QListWidget { placeholder-text-color: $muted; color: $text; background: $surface; selection-background-color: $accent; selection-color: $accent_text; border: 1px solid $border; border-radius: 8px; padding: 12px; }
-QListWidget::item { padding: 12px; border-bottom: 1px solid $border; }
+QListWidget { padding: 4px; outline: none; }
+QListWidget::item { padding: 9px 8px; border-radius: 6px; margin: 1px 0; }
+QListWidget::item:hover { background: $sunken; }
 QListWidget::item:selected { background: $tint; color: $link; }
 QTabWidget::pane { border: none; }
-QTabBar::tab { color: $muted; background: $page; padding: 12px 18px; border-bottom: 2px solid $border; }
+QTabBar::tab { color: $muted; background: transparent; padding: 9px 16px; border-bottom: 2px solid $border; }
+QTabBar::tab:hover { color: $text; }
 QTabBar::tab:selected { color: $link; border-bottom: 2px solid $link; }
 QCheckBox { color: $text; spacing: 8px; padding: 6px 0; }
 QCheckBox:disabled { color: $disabled; }
@@ -41,8 +44,52 @@ QCheckBox::indicator:hover { border-color: $link; }
 QCheckBox::indicator:checked { background: $accent; border-color: $accent; image: url("$check"); }
 
 QLabel#captionHeading { font-size: 15pt; font-weight: 600; }
-QTextBrowser#captionText { font-size: 18pt; padding: 8px; }
+QTextBrowser#captionText { font-size: 17pt; padding: 10px 14px; }
 
 QWidget#settingsBody, QScrollArea#settingsScroll { background: $page; border: none; }
 QProgressBar { background: $sunken; border: 1px solid $strong; border-radius: 3px; }
 QProgressBar::chunk { background: $link; border-radius: 2px; }
+
+/* Application shell */
+QFrame#topbar { background: $surface; border-bottom: 1px solid $border; }
+QFrame#card { background: $surface; border: 1px solid $border; border-radius: 10px; }
+QLabel#cardTitle { font-size: 11.5pt; font-weight: 600; }
+QLabel#section { color: $muted; font-size: 8.5pt; font-weight: 600; letter-spacing: 1px; }
+QLabel#stat { font-size: 20pt; font-weight: 600; }
+QLabel#clock { font-family: "IBM Plex Mono", "Consolas"; font-size: 12pt; }
+QLabel#title { font-size: 14.5pt; font-weight: 600; }
+QPushButton#nav { text-align: left; border: none; background: transparent; padding: 9px 12px; color: $muted; font-weight: 500; }
+QPushButton#nav:hover { background: $sunken; color: $text; }
+QPushButton#nav:checked { background: $tint; color: $link; }
+QPushButton#quiet { border-color: transparent; background: transparent; color: $muted; text-align: left; padding: 7px 12px; }
+QPushButton#quiet:hover { background: $sunken; color: $text; }
+QPushButton#record { color: #FFFFFF; background: $rec; border-color: $rec; font-weight: 600; padding: 8px 18px; }
+QPushButton#record:hover { background: #B42318; }
+QPushButton#record:disabled { color: $disabled; background: $sunken; border-color: $border; }
+QPushButton::menu-indicator { subcontrol-position: right center; right: 8px; width: 10px; }
+QLabel#pill { font-size: 9.5pt; font-weight: 600; padding: 5px 12px; border-radius: 12px; color: $muted; background: $sunken; border: 1px solid $border; }
+QLabel#pill[state="rec"] { color: #FFFFFF; background: $rec; border-color: $rec; }
+QLabel#pill[state="busy"] { color: $link; background: $tint; border-color: $tint_border; }
+QLabel#pill[state="ok"] { color: $ok; background: $ok_bg; border-color: $ok_bg; }
+QLabel#pill[state="error"] { color: $danger; background: $danger_bg; border-color: $danger_border; }
+QLabel#pill[state="warn"] { color: $warn; background: $warn_bg; border-color: $warn_bg; }
+QFrame#banner { background: $tint; border: 1px solid $tint_border; border-radius: 10px; }
+QFrame#banner QLabel { color: $text; }
+QLabel#dotOk { color: $ok; } QLabel#dotWarn { color: $warn; } QLabel#dotError { color: $danger; }
+QMenu { background: $surface; border: 1px solid $strong; border-radius: 6px; padding: 4px; }
+QMenu::item { padding: 7px 22px 7px 14px; border-radius: 4px; }
+QMenu::item:selected { background: $tint; color: $link; }
+QMenu::item:disabled { color: $disabled; }
+QMenu::separator { height: 1px; background: $border; margin: 4px 8px; }
+QTableWidget { background: $surface; alternate-background-color: $sunken; border: 1px solid $border; border-radius: 8px; gridline-color: transparent; selection-background-color: $tint; selection-color: $text; outline: none; }
+QTableWidget::item { padding: 6px 8px; border-bottom: 1px solid $border; }
+QHeaderView::section { background: $surface; color: $muted; font-size: 9pt; font-weight: 600; padding: 8px; border: none; border-bottom: 1px solid $strong; }
+QTableCornerButton::section { background: $surface; border: none; }
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: $strong; border-radius: 3px; min-height: 28px; }
+QScrollBar:horizontal { background: transparent; height: 10px; margin: 2px; }
+QScrollBar::handle:horizontal { background: $strong; border-radius: 3px; min-width: 28px; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
+QSplitter::handle { background: transparent; width: 12px; }
+QTextBrowser#document { font-size: 11pt; padding: 18px 22px; }

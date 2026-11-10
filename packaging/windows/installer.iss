@@ -1,4 +1,4 @@
-#define AppVersion "0.2.0"
+#define AppVersion "0.3.0"
 [Setup]
 AppId={{30FAE268-51BD-4C34-9377-B47091018D93}
 AppName=Coord

@@ -1,4 +1,6 @@
 """Readable live captions with an inline local-translation selector."""
+import html
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QTextBrowser, QVBoxLayout, QWidget
 
@@ -6,9 +8,10 @@ from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QTextBrowser, QVBo
 class CaptionPanel(QWidget):
     translation_changed = Signal(str)
 
-    def __init__(self, target="none", parent=None, chunk_seconds=4):
+    def __init__(self, target="none", parent=None, chunk_seconds=1):
         super().__init__(parent)
         self.segment = None
+        self.final = ""
         self.translation_time = -1
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -26,7 +29,7 @@ class CaptionPanel(QWidget):
         self.target.setCurrentIndex(max(0, self.target.findData(target)))
         controls.addWidget(self.target)
         layout.addLayout(controls)
-        self.notice = QLabel(f"Audio window: {chunk_seconds}s plus model processing. Translation runs separately.")
+        self.notice = QLabel(self.idle_notice(chunk_seconds))
         self.notice.setObjectName("muted")
         self.notice.setWordWrap(True)
         layout.addWidget(self.notice)
@@ -54,6 +57,10 @@ class CaptionPanel(QWidget):
         self.target.currentIndexChanged.connect(self._target_changed)
         self._update_translation_view()
 
+    @staticmethod
+    def idle_notice(step):
+        return f"Captions update every {step}s while people speak and settle at each pause. Translation runs separately."
+
     @property
     def language(self):
         return self.target.currentData()
@@ -75,6 +82,7 @@ class CaptionPanel(QWidget):
 
     def reset(self):
         self.segment = None
+        self.final = ""
         self.translation_time = -1
         self.translation_status.clear()
         self.original.clear()
@@ -83,10 +91,23 @@ class CaptionPanel(QWidget):
 
     def show_segment(self, segment):
         self.segment = (segment["start"], segment["end"])
+        self.final = segment["text"]
         self.original.setPlainText(segment["text"])
         seconds = int(segment["start"])
         language = segment.get("language") or "auto"
         self.timestamp.setText(f"{seconds // 60:02}:{seconds % 60:02} · {language}")
+
+    def show_partial(self, partial):
+        """Words still being spoken: shown dimmed after the last settled caption."""
+        text = partial.get("text", "")
+        if not text:
+            self.original.setPlainText(self.final)
+            return
+        muted = self.palette().placeholderText().color().name()
+        self.original.setHtml(f'<p dir="auto"><span style="color:{muted}">{html.escape(text)} …</span></p>')
+        if "start" in partial:
+            seconds = int(partial["start"])
+            self.timestamp.setText(f"{seconds // 60:02}:{seconds % 60:02} · {partial.get('language') or 'auto'} · speaking")
 
     def show_translation(self, segment):
         # Keep the newest completed translation visible with its own timestamp.

@@ -21,7 +21,7 @@ from .llm import Ollama
 from .minutes import SECTIONS, extract_minutes, render_markdown, transcript_lines
 from .redact import Redactor
 from .store import Store
-from .transcribe import SAMPLE_RATE, Transcriber, load_audio
+from .transcribe import SAMPLE_RATE, load_audio, make_transcriber
 
 log = logging.getLogger(__name__)
 DATE_IN_NAME = re.compile(r"(20\d{2})[-_.]?(\d{2})[-_.]?(\d{2})")
@@ -48,7 +48,8 @@ class Engine:
     def __init__(self, settings: Settings, transcriber=None, diarizer=None, llm=None):
         self.settings = settings
         self.store = Store(settings.paths.db)
-        self.transcriber = transcriber or Transcriber(settings.whisper, settings.glossary())
+        self.transcriber = transcriber or make_transcriber(
+            settings.whisper, settings.glossary(), allow_remote=settings.privacy.allow_remote_llm)
         self.diarizer = diarizer if diarizer is not None else (
             Diarizer(settings.diarization, settings.hf_token) if settings.diarization.enabled else None
         )
@@ -191,6 +192,15 @@ class Engine:
         out = self.settings.paths.minutes / f"{mid}.named.md"
         out.write_text(self.redactor().unredact(md), encoding="utf-8")
         return out
+
+    def delete_meeting(self, mid: str) -> None:
+        """Remove a meeting and its derived files. The audio recording is kept."""
+        paths = self.settings.paths
+        self.store.delete_meeting(mid)
+        for folder, names in ((paths.raw, [f"{mid}.json"]), (paths.redacted, [f"{mid}.md", f"{mid}.translation.json"]),
+                              (paths.minutes, [f"{mid}.md", f"{mid}.json", f"{mid}.named.md"])):
+            for name in names:
+                (folder / name).unlink(missing_ok=True)
 
     def set_speakers(self, mid: str, mapping: dict[str, str]) -> dict:
         redactor = self.redactor()

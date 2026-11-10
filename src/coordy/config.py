@@ -80,6 +80,10 @@ class WhisperSettings:
     multilingual: bool = True
     beam_size: int = 5
     vad: bool = True
+    # Optional company speech server (OpenAI-compatible, e.g. Speaches). "" = this PC.
+    server: str = ""
+    server_model: str = ""
+    server_timeout: float = 120
 
 
 @dataclass

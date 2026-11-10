@@ -8,12 +8,26 @@ from datetime import datetime
 from dataclasses import replace
 import uuid
 
+import numpy as np
+
 from ..pipeline import Engine
 from ..llm import Ollama
-from ..transcribe import Transcriber
+from ..transcribe import Transcriber, make_transcriber
 from .capture import WindowsCapture
 
 log = logging.getLogger(__name__)
+
+
+RATE = 16000
+MAX_UTTERANCE = 15 * RATE   # commit even without a pause, so a caption never grows unbounded
+PAUSE = RATE // 2           # this much trailing quiet ends an utterance
+QUIET = 0.008               # RMS below this is treated as a pause
+CATCH_UP = 3                # pending steps beyond this are merged into one pass
+
+TRANSLATE = ("Translate the text into {target}. It is a caption from a construction and design coordination "
+             "meeting: use the standard AECO terms (tender = مناقصة, BOQ = جدول الكميات, programme = البرنامج الزمني, "
+             "milestone = مرحلة رئيسية, shop drawings = مخططات تنفيذية). Preserve codes such as P01, numbers and "
+             "abbreviations. Return JSON with text.")
 
 
 class CaptureSession:
@@ -25,13 +39,18 @@ class CaptureSession:
             preferences.microphone, preferences.speaker_device, preferences.microphone_device,
             on_levels=lambda levels: self.emit("audio_levels", levels),
             on_devices=lambda devices: self.emit("audio_devices", devices),
-            chunk_seconds=preferences.caption_chunk_seconds)
-        self.transcriber = transcriber or Transcriber(replace(settings.whisper, beam_size=1), settings.glossary(),
-            status=lambda message: self.emit("speech_state", {"message": message, "busy": True}))
-        self.engine = engine or Engine(settings, transcriber=self.transcriber)
+            chunk_seconds=preferences.caption_step_seconds)
+        # Live captions decode with a single beam and, optionally, a faster model;
+        # the full recording is then transcribed again with the configured model.
+        live = replace(settings.whisper, beam_size=1, model=preferences.live_model or settings.whisper.model)
+        self.two_pass = transcriber is None and live.model != settings.whisper.model
+        self.transcriber = transcriber or make_transcriber(live, settings.glossary(),
+            status=lambda message: self.emit("speech_state", {"message": message, "busy": True}),
+            allow_remote=settings.privacy.allow_remote_llm)
+        self.engine = engine or (Engine(settings) if self.two_pass else Engine(settings, transcriber=self.transcriber))
         self._translation = preferences.translation
         self._translation_lock = threading.Lock()
-        self.chunks = queue.Queue(maxsize=2)
+        self.chunks = queue.Queue(maxsize=20)
         self.translation_queue = queue.Queue(maxsize=1)
         self._owns_caption_llm = engine is None
         self.caption_llm = engine.llm if engine is not None else Ollama(
@@ -52,39 +71,89 @@ class CaptureSession:
         log.info("Capture stop requested: %s", reason)
         self.capture.stop()
 
+    def _commit(self, segments, origin):
+        for segment in segments:
+            segment.start += origin
+            segment.end += origin
+            self.segments.append(segment)
+            text = self.engine.redactor().redact(segment.text)
+            self.emit("transcript", {**segment.to_dict(), "text": text})
+            with self._translation_lock:
+                target = self._translation
+            if target in {"Arabic", "English"}:
+                caption = {"start": segment.start, "end": segment.end, "language": target, "source": text}
+                self._offer_latest(self.translation_queue, caption)
+
+    def _step(self, buffer, origin, flush=False):
+        """Transcribe the open utterance. Returns what is still open: (buffer, origin).
+
+        The utterance grows one capture step at a time and is re-decoded each step, so
+        words appear about a second after they are spoken ("partial") and are corrected
+        as context arrives. A pause, or MAX_UTTERANCE, commits the text as final.
+        """
+        empty = np.zeros(0, np.float32)
+        if len(buffer) < PAUSE:
+            return (empty, origin) if flush else (buffer, origin)
+        self.emit("speech_state", {"message": f"Transcribing audio at {origin:.0f}s", "busy": True})
+        segments = self.transcriber.transcribe(buffer)
+        paused = flush or float(np.sqrt(np.mean(np.square(buffer[-PAUSE:])))) < QUIET
+        self.emit("speech_state", {"message": "Listening" if segments or not paused else
+            "Listening · no speech in the last few seconds. Check the source levels if someone is talking.", "busy": False})
+        if not segments:
+            return (empty, origin) if paused or len(buffer) >= MAX_UTTERANCE else (buffer, origin)
+        if paused or len(buffer) >= MAX_UTTERANCE and len(segments) == 1:
+            self._commit(segments, origin)
+            self.emit("partial", {"text": ""})
+            return empty, origin
+        if len(buffer) >= MAX_UTTERANCE:
+            # Keep the unfinished last phrase open and commit everything before it.
+            cut = min(len(buffer), max(0, int(segments[-1].start * RATE)))
+            self._commit(segments[:-1], origin)
+            segments = [segments[-1]]
+            buffer, origin = buffer[cut:], origin + cut / RATE
+            segments[0].start = 0.0
+        self.emit("partial", {"start": origin + segments[0].start, "language": segments[-1].language,
+                              "text": self.engine.redactor().redact(" ".join(s.text for s in segments))})
+        return buffer, origin
+
     def _consume(self):
+        buffer, origin = np.zeros(0, np.float32), 0.0
         while True:
             item = self.chunks.get()
+            taken = 1
             try:
                 if item is None:
+                    if not self.failure:
+                        self._step(buffer, origin, flush=True)
                     return
                 if self.failure:
                     continue
                 audio, offset = item
-                if len(audio) < 8000:
-                    self.emit("speech_state", {"message": "Audio fragment too short for captions", "busy": False})
-                    continue
-                self.emit("speech_state", {"message": f"Transcribing captured audio at {offset:.0f}s", "busy": True})
-                segments = self.transcriber.transcribe(audio)
-                self.emit("speech_state", {"message": "Speech recognized" if segments else
-                    "Audio processed, but no speech recognized in this chunk. Check the source levels and recording.", "busy": False})
-                for segment in segments:
-                    segment.start += offset
-                    segment.end += offset
-                    self.segments.append(segment)
-                    text = self.engine.redactor().redact(segment.text)
-                    self.emit("transcript", {**segment.to_dict(), "text": text})
-                    with self._translation_lock:
-                        target = self._translation
-                    if target in {"Arabic", "English"}:
-                        caption = {"start": segment.start, "end": segment.end, "language": target, "source": text}
-                        self._offer_latest(self.translation_queue, caption)
-
+                if len(buffer) and abs(origin + len(buffer) / RATE - offset) > 0.05:
+                    # Audio was skipped under load: close the utterance before the gap.
+                    self._step(buffer, origin, flush=True)
+                    buffer = buffer[:0]
+                if not len(buffer):
+                    origin = offset
+                buffer = np.concatenate([buffer, audio])
+                # Far behind: fold waiting steps into this pass instead of decoding each one.
+                while self.chunks.qsize() > CATCH_UP:
+                    extra = self.chunks.get()
+                    taken += 1
+                    if extra is None:
+                        self.chunks.put(None)
+                        break
+                    if abs(origin + len(buffer) / RATE - extra[1]) > 0.05:
+                        self._step(buffer, origin, flush=True)
+                        buffer, origin = buffer[:0], extra[1]
+                    buffer = np.concatenate([buffer, extra[0]])
+                buffer, origin = self._step(buffer, origin)
             except Exception as exc:
                 self.failure = exc
                 self.capture.stop()
             finally:
-                self.chunks.task_done()
+                for _ in range(taken):
+                    self.chunks.task_done()
 
     @staticmethod
     def _offer_latest(pending, item):
@@ -114,7 +183,7 @@ class CaptureSession:
                         continue
                     self.emit("translation_state", "Translating latest caption…")
                     translated = self.caption_llm.chat_json(
-                        f"Translate the text into {target}. Preserve codes such as P01. Return JSON with text.",
+                        TRANSLATE.format(target=target),
                         caption["source"], {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
                         max_tokens=256)
                     text = self.engine.redactor().guard(translated).get("text", "")
@@ -159,9 +228,9 @@ class CaptureSession:
             raise RuntimeError(f"Live processing failed; recording retained at {path}. {self.failure}")
         self.emit("speech_state", {"message": "Transcription complete; generating minutes", "busy": False})
         self.emit("status", "Generating local minutes…")
-        if isinstance(self.transcriber, Transcriber):
+        if isinstance(self.transcriber, Transcriber) and not self.two_pass:
             self.transcriber.settings = self.settings.whisper
-        segments = None if self.incomplete else self.segments
+        segments = None if self.incomplete or self.two_pass else self.segments
         mid = self.engine.process(path, title=title, segments=segments,
                                   stage=lambda name, frac=None: self.emit("status", name))
         if self.translations:

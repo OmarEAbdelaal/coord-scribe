@@ -7,7 +7,7 @@ assets = root / 'src' / 'coordy' / 'desktop' / 'assets'
 datas = [(str(assets), 'coordy/desktop/assets'),
          (str(root / 'src' / 'coordy' / 'templates'), 'coordy/templates')]
 binaries = []
-hiddenimports = ['pyaudiowpatch', 'pycaw.pycaw', 'comtypes', 'scipy.signal']
+hiddenimports = ['pyaudiowpatch', 'pycaw.pycaw', 'comtypes', 'scipy.signal', 'win32com.client', 'pythoncom']
 # Native inference libraries, tokenizer assets, VAD models and browser driver are required at runtime.
 for package in ['faster_whisper', 'ctranslate2', 'onnxruntime', 'tokenizers', 'playwright']:
     data, binary, hidden = collect_all(package)

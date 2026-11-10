@@ -76,8 +76,8 @@ def select_device(audio, name, kind):
 
 class WindowsCapture:
     def __init__(self, microphone=True, speaker_device="", microphone_device="", *,
-                 on_levels=lambda levels: None, on_devices=lambda devices: None, chunk_seconds=4):
-        self.chunk_seconds = max(2, min(10, int(chunk_seconds)))
+                 on_levels=lambda levels: None, on_devices=lambda devices: None, chunk_seconds=1):
+        self.chunk_seconds = max(1, min(10, int(chunk_seconds)))
         self.microphone = microphone
         self.speaker_device = speaker_device
         self.microphone_device = microphone_device

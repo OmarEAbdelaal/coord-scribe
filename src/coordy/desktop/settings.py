@@ -9,11 +9,25 @@ class DesktopSettings:
     microphone: bool = True
     speaker_device: str = ""
     microphone_device: str = ""
+    # Detection notices meetings and asks; auto_start records without asking.
+    detect_meetings: bool = True
     auto_start: bool = False
     auto_stop_seconds: int = 90
+    close_to_tray: bool = True
+    # Outlook calendar on this PC: upcoming meetings, reminders, optional guest.
+    calendar: bool = True
+    reminder_minutes: int = 2
+    auto_join_guest: bool = False
+    guest_name: str = "Coord meeting assistant"
     translation: str = "none"
-    caption_chunk_seconds: int = 4
+    caption_step_seconds: int = 1
     caption_model: str = ""
+    # Faster Whisper model for live captions only ("" = the configured model).
+    live_model: str = ""
+    # Company AI server ("" = this PC). Must be on a private network.
+    llm_host: str = ""
+    speech_server: str = ""
+    speech_server_model: str = ""
     auto_send: bool = False
     delivery: str = "teams"
     smtp_host: str = ""

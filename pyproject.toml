@@ -1,6 +1,6 @@
 [project]
 name = "coordy"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local-first AI meeting intelligence for AECO teams: Arabic/English transcription, speaker detection, redaction, decisions, actions, risks, searchable history, and MCP integration."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -34,6 +34,7 @@ desktop = [
     "playwright>=1.49,<2",
     "PyAudioWPatch>=0.2.12.7; sys_platform == 'win32'",
     "pycaw>=20240210; sys_platform == 'win32'",
+    "pywin32>=306; sys_platform == 'win32'",
     "psutil>=6",
 ]
 package = ["pyinstaller>=6.11,<7"]

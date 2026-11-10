@@ -118,6 +118,12 @@ class Store:
         with self.connect() as db:
             return [_meeting(r) for r in db.execute(sql, (*args, limit))]
 
+    def delete_meeting(self, id: str) -> None:
+        with self.connect() as db:
+            if self.fts:
+                db.execute("DELETE FROM segments_fts WHERE meeting_id = ?", (id,))
+            db.execute("DELETE FROM meetings WHERE id = ?", (id,))
+
     def processed_audio(self) -> set[str]:
         with self.connect() as db:
             return {r[0] for r in db.execute("SELECT audio_path FROM meetings WHERE status = 'done'")}

@@ -72,7 +72,7 @@ def run_capture(tmp_path, speaker, microphone, ticks=1, stalled=()):
             assert live_file.getnframes() / live_file.getframerate() == value['recorded_seconds']
         if len(levels) >= ticks:
             capture.stop()
-    capture = WindowsCapture(microphone, speaker, MIC, on_levels=on_levels, on_devices=devices.append)
+    capture = WindowsCapture(microphone, speaker, MIC, on_levels=on_levels, on_devices=devices.append, chunk_seconds=4)
     clock = [0.0]
     capture._clock = lambda: clock[0]
     def wait(seconds):

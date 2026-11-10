@@ -35,17 +35,27 @@ No subscriptions. Speech-to-text, speaker detection and minutes extraction all r
 
 ## Windows desktop application (phase one)
 
-A native **APG-branded meeting workspace** is now included: Windows speaker/microphone capture, opt-in meeting/presentation detection, Arabic/English live transcripts, optional local text translation, local structured minutes, and configured Teams/email delivery. A visible browser guest can attempt Teams, Meet and Zoom web joining, subject to host admission and provider policies.
+![Coord home screen](docs/images/home-dark.png)
+
+A native **APG-branded meeting assistant** for Windows:
+
+- **Record without joining**: captures the meeting audio of this PC (plus your microphone if you want), notices when a Teams/Zoom/Meet call starts and asks whether to record it.
+- **Upcoming meetings and reminders** from Outlook on the PC, with one click to record or to send Coord in.
+- **Join as a guest**: a visible, listen-only participant that keeps recording after you leave.
+- **Live captions** in Arabic, English and mixed speech that update every second, with optional live translation.
+- **Minutes**: summary, decisions, actions, risks and open questions; export to PDF/Markdown or send to Teams/email.
+- **Action register** across meetings with overdue tracking and a one-click agenda draft for the next meeting.
+- **Runs on your hardware**: on the PC, or on a [company GPU server](docs/server.md) for the whole office. Nothing goes to the cloud.
 
 ```powershell
 uv venv --python 3.12
 uv pip install -e ".[desktop]"
-# Install/start Ollama separately, then download the models:
+# Install/start Ollama separately (or point Settings > AI engine at the company server), then:
 .venv\Scripts\coordy setup-models
 .venv\Scripts\coordy-desktop.exe
 ```
 
-See **[desktop setup, installer build and acceptance checks](docs/desktop.md)** and [architecture](docs/desktop-architecture.md). This is an initial implementation: cloud tests use fake audio/model backends; Windows hardware capture, live provider admission and recognition quality require the documented Windows checks. Weights download separately; no installer binary or model weights are checked into Git.
+See **[desktop guide](docs/desktop.md)**, [company server setup](docs/server.md), [architecture](docs/desktop-architecture.md) and the [phase one status and roadmap](docs/roadmap.md). Automated tests use simulated audio and model back ends; real Windows capture, guest admission and recognition quality still need the acceptance run described in the desktop guide. Model weights download separately; no installer binary or weights are in Git.
 
 ## Install (Windows 11 + NVIDIA)
 

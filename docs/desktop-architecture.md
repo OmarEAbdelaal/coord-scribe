@@ -29,9 +29,13 @@ Core files:
 
 | Path | Responsibility |
 | --- | --- |
-| `src/coordy/desktop/app.py` | Qt interface, worker lifecycle and orchestration |
+| `src/coordy/desktop/app.py` | Main window (Home, Meetings, Actions), worker lifecycle and orchestration |
+| `src/coordy/desktop/views.py` | Settings, action register, speaker naming, agenda draft |
+| `src/coordy/desktop/ui.py` | Themed icons, cards, status pills, minutes document styling |
+| `src/coordy/desktop/calendar.py` | Outlook calendar on this PC, join links, reminders |
+| `src/coordy/desktop/server.py`, `src/coordy/remote.py` | Company AI server overlay and speech-server client (private networks only) |
 | `src/coordy/desktop/capture.py` | Windows WASAPI loopback/mic, PCM mixing and resampling |
-| `src/coordy/desktop/session.py` | Live queue, timestamp offsets and finalization |
+| `src/coordy/desktop/session.py` | Rolling live transcription (partials, pause commit), translation worker and finalization |
 | `src/coordy/desktop/detection.py` | Meeting/presentation evidence and debounce state |
 | `src/coordy/desktop/guest.py` | Provider URL validation and visible browser guest |
 | `src/coordy/desktop/models.py` | Model download/readiness checks |

@@ -1,8 +1,22 @@
 # Windows desktop phase one
 
-Coord 0.2 adds a native Windows meeting workspace using the APG Brand Kit. It captures the selected Windows speaker output and, optionally, your microphone; transcribes Arabic, English and mixed speech locally; optionally translates text using local Ollama; and extracts decisions, actions, risks and questions. Completed redacted minutes can be delivered through a Teams Workflow webhook or SMTP.
+Coord 0.3 is a native Windows meeting workspace using the APG Brand Kit. It captures the selected Windows speaker output and, optionally, your microphone; transcribes Arabic, English and mixed speech locally; optionally translates text using local Ollama; and extracts decisions, actions, risks and questions. Completed redacted minutes can be delivered through a Teams Workflow webhook or SMTP.
 
 This is an initial implementation. Automated behavior is covered by tests with fake audio and model backends. Windows hardware capture, provider guest admission, real recognition quality and installer execution still need the acceptance checks below. No speech model guarantees every word, especially with overlapping speakers, dialects or poor audio.
+
+## The workspace
+
+![Home](images/home-dark.png)
+
+| Screen | What it is for |
+| --- | --- |
+| **Home** (Ctrl+1) | Today's numbers, upcoming Outlook meetings, sending Coord as a guest, capture options and import. |
+| **Meetings** (Ctrl+2) | Searchable library (titles and transcripts), live captions, minutes, transcript and translation, send/export, speaker naming. |
+| **Actions** (Ctrl+3) | Every decision, action, risk and question across meetings. Tick to close, see overdue items, draft the next agenda. |
+| **Top bar** | Recording state, timer, meeting/microphone levels and the single Start/Stop button (Ctrl+R). |
+| **Sidebar** | AI engine health (where speech and minutes run, and whether they are reachable), Settings (Ctrl+,) and the data folder. |
+
+Other shortcuts: Ctrl+I import a recording, Ctrl+F search meetings. Closing the window keeps Coord in the notification area so it can keep noticing meetings; quit from the tray icon. Switch this off in Settings › Meetings.
 
 ## Run from source on Windows 11 x64
 
@@ -42,38 +56,37 @@ Edit `aliases.toml` before sharing minutes. Only the redacted view is shown and 
 
 ## Capture and detection
 
-1. Open **Settings → Meeting audio output** and select the speaker or headset used by Teams/Zoom/your browser. Click **Refresh audio devices** after connecting or switching devices. The Windows default output can differ from a meeting app’s communications output. Select **Microphone input** separately and choose whether to **Include my microphone**. Computer sound is always captured, including when the microphone is disabled. Stop and start capture after changing devices.
-2. Click **Start capture**, or opt into **Detect meetings and presentations**.
-3. Live text uses four-second audio windows by default, plus model processing time. Change Caption window in Settings (2–10 seconds). Final minutes are produced after **Stop and summarise**. Audio is streamed to disk while recording.
-4. Review the transcript, translation and minutes. Export Markdown or send to your configured destination.
+1. Open **Settings › Audio** and select the speaker or headset used by Teams/Zoom/your browser as **Meeting audio output**. The Windows default output can differ from a meeting app's communications output. Computer sound is always captured; the microphone is optional (also on Home).
+2. Click **Start recording** (Ctrl+R), or let Coord notice the meeting.
+3. Review the transcript, translation and minutes, then send or export (PDF, Markdown, or an internal copy with real names restored).
 
-Detection checks active Windows audio sessions for Teams, Zoom and Webex. Browser sessions also need a meeting-like window title. PowerPoint slide-show windows are detected separately. Detection requires two positive polls and uses a 90-second stop grace period (configurable) to tolerate short silences. This is a heuristic: it cannot reliably distinguish every meeting from notifications, inactive browser tabs or presentations. Continuous audio activity can delay stopping; use Stop manually. Concurrent meetings are recorded together. Automatic capture and delivery are disabled by default, and the app stays visibly open while recording or processing. Tell participants that recording is taking place.
+**Meeting detection** is on by default and only asks. When Teams, Zoom or Webex holds an active audio session, or a browser tab with a meeting-like title does, a banner and a Windows notification offer **Record meeting**. Nothing is recorded until you accept, unless you enable *Record detected meetings without asking*. A recording started this way stops by itself after the meeting ends (90-second grace, configurable). Detection needs two positive polls and is a heuristic: it can miss a meeting or react to other call audio. Concurrent meetings are recorded together.
 
-The status bar has separate **Computer sound** and **Mic** meters, measured before mixing. Hover over each meter to see its selected device. If computer sound stays silent for ten seconds, the app suggests checking the output selection. Normal meeting silence can also trigger that notice. An unplugged saved device produces an error rather than silently switching to another endpoint.
+**Upcoming meetings** come from classic Outlook on this PC through its local COM interface, including recurring meetings; nothing is sent anywhere. Coord reminds you before each meeting (2 minutes by default) and offers to record or to send the guest when the invitation contains a Teams, Meet or Zoom link. *Send the Coord guest to calendar meetings automatically* is off by default. The new Outlook app has no COM interface, so the list stays empty there; paste the link instead (a Microsoft Graph calendar adapter is on the roadmap).
 
-The recording banner shows the duration actually saved to WAV. Capture polls available frames independently from the output and microphone: a dormant source contributes silence while the other continues. Stop does not wait for a silent input to deliver a block. The WAV header is updated as data is written. Capture diagnostics in `logs/desktop.log` include elapsed time, saved duration, source-frame counts and user/automatic stop requests. Recordings shorter than one second report a capture-duration error before final transcription; fragments shorter than half a second are not sent to Whisper.
+The top bar has separate **Meeting** and **Mic** meters, measured before mixing. If computer sound stays silent for ten seconds, the status bar suggests checking the output selection. An unplugged saved device produces an error rather than silently switching to another endpoint. Capture diagnostics are in `logs/desktop.log`. Recordings shorter than one second report a capture-duration error.
 
-To diagnose a mic-only recording: play meeting audio, stop capture, choose that exact output in Settings, turn **Include my microphone** off, and start capture again. The **Computer sound** meter should move. If it does not, check the meeting application's speaker/output setting and Windows **System → Sound → Volume mixer**. Bluetooth devices can switch between stereo and hands-free endpoints when a call starts; refresh/select the endpoint in use during the meeting. After confirming computer audio, re-enable the microphone if needed.
-
-Capture uses WASAPI loopback and includes **all audio** on that speaker device, not just a particular meeting. Keep unrelated applications quiet and use headphones to reduce duplicate mic pickup. The microphone and speaker streams are mixed; this does not provide per-participant tracks. Hardware clock drift and echo need real-device testing. Recordings are retained on processing errors and can be imported again after correcting the model/configuration issue.
-
-If the **Computer sound** meter moves but captions stay empty, audio is reaching capture; inspect the caption processing message for Whisper loading, CPU fallback, transcription, or Ollama translation. Processing time depends on hardware and may exceed the configured capture window. The desktop records model-loading/fallback diagnostics in `~/Coordy/logs/desktop.log`. Select a failed meeting and open **Minutes and actions** to see its stored error. A quiet Mic meter must be checked separately against the selected input, hardware mute and Windows desktop-app microphone permissions.
+Capture uses WASAPI loopback and includes **all audio** on that speaker device, not just a particular meeting. Keep unrelated applications quiet and use headphones to reduce duplicate mic pickup. The microphone and speaker streams are mixed; this does not provide per-participant tracks. Recordings are retained on processing errors: select the failed meeting and choose **More › Process recording again** after fixing the cause shown in its Minutes tab.
 
 ## Live captions panel
 
-Open **Live captions** in the main workspace. The panel shows the latest original speech in large text, with its timestamp and detected language. Use **Translate to** to choose **Off · original speech**, **Arabic**, or **English**. This selector remains available during capture; a changed language applies to the next speech segment. Starting capture automatically opens this panel.
+Starting a recording opens **Meetings › Live captions**. Audio reaches the speech model every second (Settings › Live captions, 1–10 s). The sentence being spoken is decoded again each second as it grows, shown dimmed, and corrected as more context arrives; at a pause of about half a second, or after 15 seconds without one, it settles as a final caption and joins the transcript. The design target on a GPU is text about one second plus model time after the words are spoken; this has not yet been measured on target hardware.
 
-Speech uses four-second windows by default with faster single-beam live decoding. Shorter windows have less context and may reduce recognition quality. Translation runs in its own worker using a 2,048-token context, a 256-token output cap and a 20-second network timeout. It cannot block original caption processing. The newest completed translation stays visible with its own audio timestamp; replies for other languages are ignored. Pending translation is limited to the latest caption, so intermediate translations can be skipped during overload. Saved translation history contains only completed translations, not a guaranteed full translation of the recording. A translation error appears in the panel while recording and original captions continue. Final summaries still require a working Ollama service. Full transcript and translation history remain in their separate tabs, and saved translations include timestamps and the selected language.
+Use **Translate to** for Arabic or English text translation of each settled caption. Translation has its own worker with a small context and a 20-second timeout, so it cannot hold up captions; when it falls behind, only the newest caption is translated. A translation error is shown in the panel while recording continues. Saved translation history contains completed translations only.
 
 ## Reducing live latency
 
-The four-second capture window is only the first part of latency. Whisper large-v3 and qwen3:14b can still be slow on CPU. Live transcription keeps at most two pending windows and drops older pending windows when overloaded; the full WAV remains intact and is re-transcribed after stopping if any live window was skipped. Live translation retains only the newest pending caption. Final full-file retranscription uses the normal decoding settings; minutes use the normal configured LLM.
+Latency is the update interval plus the time the model needs for the open sentence (up to 15 seconds of audio). Options, fastest first:
 
-For a faster CPU configuration, set `[whisper] model = "small"` in `~/Coordy/config.toml`, then run `coordy setup-models` to download it. This trades some recognition quality for speed. For lighter translation, run `ollama pull qwen3:4b`, then enter `qwen3:4b` in Settings → Caption model. Blank means use the minutes model. These settings take effect on the next recording. A working NVIDIA/CUDA setup can improve Whisper throughput; real-time performance is hardware-dependent.
+- **Company GPU server** for speech and minutes: see [server.md](server.md). Every PC then gets GPU speed without a GPU.
+- **Fast caption model**: set Settings › Live captions › *Fast caption speech model* to `large-v3-turbo` (or `small` on CPU). Live captions use it; after you stop, the whole recording is transcribed again with the accurate model from `config.toml`, so minutes do not lose quality. Run `coordy setup-models` once per model name you use.
+- **Lighter translation model**: `ollama pull qwen3:4b`, then enter it as *Translation model*.
+
+On a CPU-only PC the large model cannot keep up in real time. Coord then merges waiting audio into one pass, and if it still falls more than 20 seconds behind it skips ahead; the recording stays complete and is transcribed in full after you stop.
 
 ## Join as a separate participant
 
-Paste a Teams, Google Meet or Zoom HTTPS invitation, choose a visible name and click **Join as guest**. A separate Microsoft Edge window opens in a fresh browser context. Coord attempts common English guest-name/join controls and never bypasses a host lobby, authentication, CAPTCHA or organizational guest policy. Complete provider-specific steps in that window when needed. The participant is listen-only: microphone and camera permissions are denied. You hear its audio through this PC, and the Windows capture path transcribes it.
+On Home, paste a Teams, Google Meet or Zoom HTTPS invitation (or pick a calendar meeting), choose a visible name and click **Join as guest**. Coord keeps listening after you leave the meeting yourself, as long as this PC stays on. A separate Microsoft Edge window opens in a fresh browser context. Coord attempts common English guest-name/join controls and never bypasses a host lobby, authentication, CAPTCHA or organizational guest policy. Complete provider-specific steps in that window when needed. The participant is listen-only: microphone and camera permissions are denied. You hear its audio through this PC, and the Windows capture path transcribes it.
 
 When a recognized Leave control becomes visible, the app reports the guest as joined and starts capture if idle. If the provider UI differs, use Start capture manually after verifying that the guest is admitted. **Leave guest** closes that guest browser and stops capture. Joining the same meeting from your personal client and this guest may duplicate audio; mute one playback source. No participant joins during installation or automated tests.
 
@@ -99,7 +112,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php). Run on Windows:
 powershell -ExecutionPolicy Bypass -File scripts\build-desktop.ps1
 ```
 
-This runs tests, builds the native app with PyInstaller and produces `dist/installer/Coord-Setup-0.2.0-x64.exe`. The portable app is `dist/Coord/Coord.exe`. The installer runs per user without administrator privileges, adds shortcuts, and preserves meeting data on uninstall. It includes application libraries and fonts, not Whisper/LLM weights or Ollama/Edge. It is unsigned; code signing needs your organization's signing certificate.
+This runs tests, builds the native app with PyInstaller and produces `dist/installer/Coord-Setup-0.3.0-x64.exe`. The portable app is `dist/Coord/Coord.exe`. The installer runs per user without administrator privileges, adds shortcuts, and preserves meeting data on uninstall. It includes application libraries and fonts, not Whisper/LLM weights or Ollama/Edge. It is unsigned; code signing needs your organization's signing certificate.
 
 The **Windows desktop installer** GitHub Actions workflow can be run manually after it is available on the repository's default branch; tags named `desktop-v*` also trigger builds. It uploads the installer and portable app as a workflow artifact. It tests the frozen UI startup but cannot test real audio devices or hosted meetings. An artifact is not a published release.
 
