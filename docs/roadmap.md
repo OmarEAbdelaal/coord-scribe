@@ -16,7 +16,8 @@ Phase one goal: Coord as the company meeting secretary: record or join meetings,
 | Action register, overdue view, agenda draft | Built | Agenda is assembled from open items, no model needed |
 | Who is speaking | Partial | Voices are separated (S1, S2…) after the meeting and named by hand |
 | AI on a company server | Built, needs a live deployment test | See [server.md](server.md) |
-| Installer | Built, unsigned | Needs the company code-signing certificate |
+| Installer | Built, unsigned | Published as a GitHub pre-release from `desktop-v*` tags; needs the company code-signing certificate |
+| Start with Windows, morning reminder for due actions | Built | Settings › Meetings |
 
 Automated tests use simulated audio devices, speech and LLM back ends. Nothing in this table has been exercised against real meetings in CI.
 

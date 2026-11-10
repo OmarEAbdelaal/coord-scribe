@@ -29,6 +29,7 @@ from .models import install_models
 from .server import apply_server, describe
 from .session import CaptureSession
 from .settings import DesktopSettings
+from .startup import ReminderLog, due_summary, reminder_text, set_autostart
 from .theme import ThemeManager
 from .theme import LIGHT
 from .ui import Card, button, document_html, dot, icon, label, set_state
@@ -137,6 +138,7 @@ class Window(QMainWindow):
         self.timer.timeout.connect(self.poll_detection)
         self.timer.timeout.connect(self.update_speech_progress)
         self.timer.timeout.connect(self.poll_calendar)
+        self.timer.timeout.connect(self.poll_action_reminders)
         self.timer.start(3000)
         self.health_timer = QTimer(self)
         self.health_timer.timeout.connect(self.check_health)
@@ -831,6 +833,10 @@ class Window(QMainWindow):
         if Preferences(self).exec() == QDialog.DialogCode.Accepted:
             self.preferences.save(self.settings.paths.root)
             self.reload_settings(quiet=True)
+            try:
+                set_autostart(self.preferences.start_with_windows)
+            except OSError as exc:
+                self.show_error(f"Could not change start with Windows: {exc}")
             self.captions.target.setCurrentIndex(self.captions.target.findData(self.preferences.translation))
             self.captions.notice.setText(CaptionPanel.idle_notice(self.preferences.caption_step_seconds))
             self.detector.grace = self.preferences.auto_stop_seconds
@@ -995,6 +1001,18 @@ class Window(QMainWindow):
             self.calendar_error = message
             self.show_events([])
         self.spawn(lambda emit: calendar.outlook_events(), done, failed, background=True)
+
+    def poll_action_reminders(self):
+        if not self.preferences.action_reminders:
+            return
+        log_file = ReminderLog(self.settings.paths.root)
+        if not log_file.due():
+            return
+        overdue, due_today = due_summary(Engine(self.settings).store.items(kind="action", limit=2000))
+        log_file.mark()
+        text = reminder_text(overdue, due_today)
+        if text:
+            self.notify("Actions need attention", text)
 
     def show_events(self, events):
         now = datetime.now()
@@ -1182,7 +1200,10 @@ def main():
     logging.getLogger("coordy.transcribe").setLevel(logging.INFO)
     logging.getLogger("coordy.desktop.capture").setLevel(logging.INFO)
     logging.getLogger("coordy.desktop.session").setLevel(logging.INFO)
-    window.show()
+    if "--background" in sys.argv and window.tray:
+        window.hide()  # started by Windows sign-in: live in the tray
+    else:
+        window.show()
     if "--smoke-test" in sys.argv:
         # Used by Windows packaging CI: construct the actual frozen interface, then exit.
         QTimer.singleShot(500, app.quit)

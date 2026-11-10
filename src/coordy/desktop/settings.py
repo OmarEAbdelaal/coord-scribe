@@ -14,6 +14,9 @@ class DesktopSettings:
     auto_start: bool = False
     auto_stop_seconds: int = 90
     close_to_tray: bool = True
+    start_with_windows: bool = False
+    # Morning notification listing actions due today or overdue.
+    action_reminders: bool = True
     # Outlook calendar on this PC: upcoming meetings, reminders, optional guest.
     calendar: bool = True
     reminder_minutes: int = 2

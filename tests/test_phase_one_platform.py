@@ -148,6 +148,24 @@ def test_agenda_and_overdue_use_open_items_only():
     assert 'Old task' not in agenda and 'Risks to review' in agenda and 'Nothing open' in agenda
 
 
+def test_due_action_reminders_and_once_per_day(tmp_path):
+    from coordy.desktop.startup import ReminderLog, due_summary, reminder_text, command
+    today = date(2026, 11, 10)
+    def item(text, due, status='open', kind='action'):
+        return {'kind': kind, 'text': text, 'due': due, 'status': status}
+    overdue, due_today = due_summary([item('Late', '2026-11-01'), item('Today', '2026-11-10'), item('Soon', '2026-11-20'),
+                                      item('Done', '2026-11-01', 'closed'), item('Vague', 'Thursday'),
+                                      item('Risk', '2026-11-01', kind='risk')], today)
+    assert [i['text'] for i in overdue] == ['Late'] and [i['text'] for i in due_today] == ['Today']
+    assert reminder_text(overdue, due_today).startswith('1 overdue and 1 due today. First: Late')
+    assert reminder_text([], []) == ''
+    log = ReminderLog(tmp_path)
+    assert log.due(today)
+    log.mark(today)
+    assert not log.due(today) and log.due(date(2026, 11, 11))
+    assert '-m coordy.desktop.app --background' in command()
+
+
 pytest.importorskip('PySide6')
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication

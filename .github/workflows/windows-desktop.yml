@@ -5,7 +5,7 @@ on:
     branches: ['main', 'codex/windows-desktop-phase-one']
     tags: ['desktop-v*']
 permissions:
-  contents: read
+  contents: write
 jobs:
   windows:
     runs-on: windows-latest
@@ -30,3 +30,14 @@ jobs:
             dist/installer/*.exe
             dist/Coord/
           if-no-files-found: error
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
+          Compress-Archive -Path dist/Coord -DestinationPath dist/Coord-portable-x64.zip
+          gh release create $env:GITHUB_REF_NAME $installer.FullName dist/Coord-portable-x64.zip `
+            --title "Coord $($env:GITHUB_REF_NAME -replace '^desktop-v','')" --prerelease `
+            --notes "Test build. Unsigned installer: Windows SmartScreen will warn; choose More info, then Run anyway. Models download separately inside the app. See docs/desktop.md for setup and the acceptance checklist."

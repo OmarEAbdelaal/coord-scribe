@@ -271,6 +271,8 @@ class Preferences(QDialog):
         self.check(form, "auto_join_guest", "Send the Coord guest to calendar meetings automatically")
         self.text(form, "guest_name", "Guest display name")
         self.check(form, "close_to_tray", "Keep running in the notification area when the window is closed")
+        self.check(form, "start_with_windows", "Start Coord when I sign in to Windows (minimised to the tray)")
+        self.check(form, "action_reminders", "Remind me each morning about actions due today or overdue")
         self.note(form, "Recording is never hidden: the guest joins under a visible name and Coord shows a recording "
                         "indicator. Tell participants and follow your meeting policy.")
 
