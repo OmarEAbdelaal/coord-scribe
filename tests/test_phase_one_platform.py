@@ -228,7 +228,7 @@ def test_export_pdf_delete_meeting_and_action_register(settings, engine, tmp_pat
     page.table.item(0, 0).setCheckState(Qt.CheckState.Checked)
     assert engine.store.items(meeting_id='m1')[0]['status'] == 'closed'
     assert page.table.rowCount() == 0 and window.stats['open'].text() == '0'
-    monkeypatch.setattr(QMessageBox, 'question', lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, 'question', staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Yes))
     window.delete_meeting()
     assert engine.store.meeting('m1') is None and window.history.count() == 0
     assert not (settings.paths.minutes / 'm1.md').exists()

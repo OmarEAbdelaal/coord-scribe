@@ -127,3 +127,15 @@ def engine(settings, fake_ollama):
 @pytest.fixture
 def recording(settings):
     return write_wav(settings.paths.inbox / "2026-10-28 coordination meeting.wav")
+
+
+@pytest.fixture(autouse=True)
+def no_modal_dialogs(monkeypatch):
+    """A modal box would block a headless run forever (e.g. no audio devices on a CI runner)."""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+    except ImportError:
+        return
+    for name in ("information", "warning", "critical"):
+        monkeypatch.setattr(QMessageBox, name, staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Ok))
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.No))

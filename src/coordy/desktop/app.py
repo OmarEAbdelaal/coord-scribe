@@ -953,8 +953,9 @@ class Window(QMainWindow):
                 comtypes.CoUninitialize()
         def failed(message):
             self.detecting = False
+            # Not modal: this runs unattended in the background.
             self.monitor.setChecked(False)
-            self.show_error("Meeting detection stopped: " + message)
+            self.notify("Meeting detection stopped", message)
         self.spawn(scan, self.detected, failed, background=True)
 
     def detected(self, activities):
