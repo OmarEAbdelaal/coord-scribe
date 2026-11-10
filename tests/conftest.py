@@ -139,3 +139,16 @@ def no_modal_dialogs(monkeypatch):
     for name in ("information", "warning", "critical"):
         monkeypatch.setattr(QMessageBox, name, staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.Ok))
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *args, **kwargs: QMessageBox.StandardButton.No))
+
+
+@pytest.fixture(autouse=True)
+def no_real_hardware(monkeypatch):
+    """Desktop tests must not touch real audio, window or Outlook APIs (native, thread-unsafe, absent on CI)."""
+    try:
+        import coordy.desktop.app as app_module
+        import coordy.desktop.views as views_module
+    except ImportError:
+        return
+    monkeypatch.setattr(views_module, "list_audio_devices", lambda: {"speakers": [], "microphones": []})
+    monkeypatch.setattr(app_module, "windows_activity", lambda: [])
+    monkeypatch.setattr(app_module.calendar, "outlook_events", lambda *args, **kwargs: [])

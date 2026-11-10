@@ -13,6 +13,8 @@ import numpy as np
 RATE = 16000
 WASAPI = 13
 log = logging.getLogger(__name__)
+# PortAudio is not thread-safe: never initialise it from two threads at once.
+PORTAUDIO = threading.Lock()
 
 
 def mono_pcm(data: bytes, channels: int, source_rate: int) -> np.ndarray:
@@ -50,12 +52,13 @@ def list_audio_devices():
     if sys.platform != "win32":
         return {"speakers": [], "microphones": []}
     import pyaudiowpatch as pa
-    audio = pa.PyAudio()
-    try:
-        catalog = device_catalog(audio)
-        return {kind: [{"name": device["name"]} for device in devices] for kind, devices in catalog.items()}
-    finally:
-        audio.terminate()
+    with PORTAUDIO:
+        audio = pa.PyAudio()
+        try:
+            catalog = device_catalog(audio)
+            return {kind: [{"name": device["name"]} for device in devices] for kind, devices in catalog.items()}
+        finally:
+            audio.terminate()
 
 
 def select_device(audio, name, kind):
